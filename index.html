@@ -491,13 +491,13 @@ async function ghGetRemote() {
   const list = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/`, {
     headers: { ...h, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
   if (list.status === 401 || list.status === 403 || list.status === 404) throw new Error('auth:' + list.status);
-  if (!list.ok) throw new Error('net');
+  if (!list.ok) throw new Error('net:' + list.status);
   const arr = await list.json();
   const ent = Array.isArray(arr) ? arr.find(f => f.name === 'state.json') : null;
   if (!ent) return { sha: null, data: null };
   const raw = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/state.json`, {
     headers: { ...h, Accept: 'application/vnd.github.raw' }, cache: 'no-store' });
-  if (!raw.ok) throw new Error('net');
+  if (!raw.ok) throw new Error('net:' + raw.status);
   return { sha: ent.sha, data: JSON.parse(await raw.text()) };
 }
 async function ghPut(sha) {
@@ -1185,11 +1185,19 @@ function renderPpl() {
         toast('同步已自動連線 ✓ ☁️');
       } catch (e) {
         syncCfg = null;
-        toast(e.message && e.message.startsWith('auth') ? '連結中的金鑰已失效' : '連不上網路,稍後重開一次');
+        toast(e.message && e.message.startsWith('auth') ? '連結中的金鑰已失效'
+          : `連不上同步伺服器(${(e.message || '').startsWith('net:') ? 'HTTP ' + e.message.slice(4) : '網路被擋'}),請確認用 Safari 開啟且有網路`);
       }
     }
   }
   render();
+  // 在 LINE / FB 等 App 內建瀏覽器裡,儲存與同步都不可靠 → 提醒改用 Safari
+  if (/Line\/|FBAV|FBAN|Instagram|MicroMessenger/i.test(navigator.userAgent)) {
+    const b = document.createElement('div');
+    b.style.cssText = 'background:var(--accent);color:#fff;font-size:13px;line-height:1.6;padding:10px 14px;text-align:center;font-weight:600;border-radius:0 0 12px 12px';
+    b.textContent = '⚠️ 你正在 LINE 內建瀏覽器中。請點右下角「⋯」→ 用 Safari(預設瀏覽器)開啟,同步和資料保存才會正常!';
+    document.getElementById('app').prepend(b);
+  }
   if (syncCfg) { setSyncDot('ok'); syncNow(false); }
   // 回到前景時自動抓最新資料
   document.addEventListener('visibilitychange', () => {

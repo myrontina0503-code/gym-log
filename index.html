@@ -1106,7 +1106,8 @@ function renderPpl() {
     });
   } else {
     view.querySelector('#sync-go').addEventListener('click', async () => {
-      const key = view.querySelector('#sync-key').value.trim();
+      // 自動清掉貼上時混入的空格與斷行
+      const key = view.querySelector('#sync-key').value.replace(/\s+/g, '');
       if (!key) { toast('請貼上同步金鑰'); return; }
       syncCfg = { token: key };
       setSyncDot('busy');
@@ -1116,10 +1117,12 @@ function renderPpl() {
         renderPpl();
         toast('連線成功 ✓ 同步中…');
         syncNow(false);
-      } catch {
+      } catch (e) {
         syncCfg = null;
         setSyncDot('');
-        toast('金鑰無效,請確認後再貼一次');
+        toast(e.message === 'auth'
+          ? `金鑰不對(貼進來 ${key.length} 字,正確是 40 字)`
+          : '連不上網路,請確認收訊後再按一次連線');
       }
     });
   }

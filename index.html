@@ -490,7 +490,7 @@ async function ghGetRemote() {
   const h = { Authorization: `Bearer ${syncCfg.token}` };
   const list = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/`, {
     headers: { ...h, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
-  if (list.status === 401 || list.status === 403 || list.status === 404) throw new Error('auth');
+  if (list.status === 401 || list.status === 403 || list.status === 404) throw new Error('auth:' + list.status);
   if (!list.ok) throw new Error('net');
   const arr = await list.json();
   const ent = Array.isArray(arr) ? arr.find(f => f.name === 'state.json') : null;
@@ -558,7 +558,7 @@ async function syncNow(manual) {
     if (manual) toast('已同步 ✓ ☁️');
   } catch (e) {
     setSyncDot('err');
-    if (manual) toast(e.message === 'auth' ? '同步金鑰無效或權限不足' : '同步失敗,請檢查網路');
+    if (manual) toast(e.message.startsWith('auth') ? '同步金鑰無效或權限不足' : '同步失敗,請檢查網路');
   }
   syncBusy = false;
 }
@@ -1120,8 +1120,8 @@ function renderPpl() {
       } catch (e) {
         syncCfg = null;
         setSyncDot('');
-        toast(e.message === 'auth'
-          ? `金鑰不對(貼進來 ${key.length} 字,正確是 40 字)`
+        toast(e.message.startsWith('auth')
+          ? `金鑰不對(貼進來 ${key.length} 字,正確是 40 字,HTTP ${e.message.slice(5)})`
           : '連不上網路,請確認收訊後再按一次連線');
       }
     });
@@ -1174,6 +1174,21 @@ function renderPpl() {
     }
   } catch {}
   try { syncCfg = await idbGet('sync') || null; } catch {}
+  // 一鍵連線:網址帶 #key=金鑰 時自動連線(保留 hash,讓「加入主畫面」也帶著金鑰)
+  if (!syncCfg) {
+    const m = location.hash.match(/key=([A-Za-z0-9_]+)/);
+    if (m) {
+      syncCfg = { token: m[1] };
+      try {
+        await ghGetRemote();
+        await idbSet('sync', syncCfg);
+        toast('同步已自動連線 ✓ ☁️');
+      } catch (e) {
+        syncCfg = null;
+        toast(e.message && e.message.startsWith('auth') ? '連結中的金鑰已失效' : '連不上網路,稍後重開一次');
+      }
+    }
+  }
   render();
   if (syncCfg) { setSyncDot('ok'); syncNow(false); }
   // 回到前景時自動抓最新資料

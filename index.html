@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#c9491d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>重訓記錄</title>
+<style>
+:root {
+  --page: #f4f3ef;
+  --surface: #fcfcfa;
+  --sunken: #edece6;
+  --ink: #171610;
+  --ink2: #56534a;
+  --muted: #8b877a;
+  --hair: rgba(23,22,16,0.10);
+  --grid: #e5e3da;
+  --base: #c8c5ba;
+  --accent: #c9491d;
+  --accent-soft: rgba(201,73,29,0.10);
+  --on-accent: #ffffff;
+  --danger: #c03636;
+  --p0:#2a78d6; --p1:#1baf7a; --p2:#eda100; --p3:#008300; --p4:#4a3aa7; --p5:#e34948; --p6:#e87ba4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #121110;
+    --surface: #1c1b18;
+    --sunken: #262521;
+    --ink: #f4f3ee;
+    --ink2: #c5c2b6;
+    --muted: #8b877a;
+    --hair: rgba(255,255,255,0.11);
+    --grid: #2b2a25;
+    --base: #3b3a33;
+    --accent: #e8683a;
+    --accent-soft: rgba(232,104,58,0.16);
+    --on-accent: #ffffff;
+    --danger: #e66767;
+    --p0:#3987e5; --p1:#199e70; --p2:#c98500; --p3:#008300; --p4:#9085e9; --p5:#e66767; --p6:#d55181;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #121110; --surface: #1c1b18; --sunken: #262521;
+  --ink: #f4f3ee; --ink2: #c5c2b6; --muted: #8b877a;
+  --hair: rgba(255,255,255,0.11); --grid: #2b2a25; --base: #3b3a33;
+  --accent: #e8683a; --accent-soft: rgba(232,104,58,0.16); --on-accent: #ffffff;
+  --danger: #e66767;
+  --p0:#3987e5; --p1:#199e70; --p2:#c98500; --p3:#008300; --p4:#9085e9; --p5:#e66767; --p6:#d55181;
+}
+:root[data-theme="light"] {
+  --page: #f4f3ef; --surface: #fcfcfa; --sunken: #edece6;
+  --ink: #171610; --ink2: #56534a; --muted: #8b877a;
+  --hair: rgba(23,22,16,0.10); --grid: #e5e3da; --base: #c8c5ba;
+  --accent: #c9491d; --accent-soft: rgba(201,73,29,0.10); --on-accent: #ffffff;
+  --danger: #c03636;
+  --p0:#2a78d6; --p1:#1baf7a; --p2:#eda100; --p3:#008300; --p4:#4a3aa7; --p5:#e34948; --p6:#e87ba4;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { background: var(--page); }
+body {
+  font-family: system-ui, -apple-system, "PingFang TC", "Segoe UI", "Microsoft JhengHei", sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; background:none; border:none; cursor:pointer; }
+input, select { font: inherit; color: var(--ink); }
+
+#app { max-width: 520px; margin: 0 auto; min-height: 100dvh; display:flex; flex-direction:column; }
+.topbar {
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding: 18px 16px 10px;
+}
+.topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: .03em; }
+.topbar .date { font-size: 12px; color: var(--muted); }
+main { flex:1; padding: 4px 14px calc(84px + env(safe-area-inset-bottom)); }
+
+.tabbar {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 520px;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--hair);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 20;
+}
+.tabbar button {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding: 9px 0 7px; font-size: 11px; color: var(--muted); font-weight:600;
+}
+.tabbar button .ic { font-size: 20px; line-height:1; filter: grayscale(1) opacity(.55); }
+.tabbar button.on { color: var(--accent); }
+.tabbar button.on .ic { filter:none; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.card h2 { font-size: 13px; font-weight: 700; color: var(--ink2); margin-bottom: 10px; letter-spacing:.04em; }
+.hint { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.section-label { font-size: 12px; color: var(--muted); margin: 2px 2px 8px; letter-spacing:.05em; }
+
+/* chips */
+.chips { display:flex; gap:8px; overflow-x:auto; padding: 2px; scrollbar-width:none; }
+.chips::-webkit-scrollbar { display:none; }
+.chip {
+  flex:none; display:flex; align-items:center; gap:6px;
+  padding: 8px 14px; border-radius: 999px;
+  background: var(--sunken); border: 1.5px solid transparent;
+  font-size: 14px; font-weight: 600; color: var(--ink2);
+}
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.chip .dot { width: 9px; height: 9px; border-radius: 50%; flex:none; }
+.chip img { width: 22px; height: 22px; border-radius: 6px; object-fit: cover; }
+
+/* machine grid */
+.mgrid { display:grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+.mcard {
+  border-radius: 12px; overflow:hidden; border: 2px solid transparent;
+  background: var(--sunken); text-align:center; padding-bottom: 7px;
+}
+.mcard.on { border-color: var(--accent); background: var(--accent-soft); }
+.mcard .ph { width:100%; aspect-ratio:1; object-fit:cover; display:block; background:var(--base); }
+.mcard .ph-empty {
+  width:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  font-size: 30px; font-weight: 800; color: var(--muted); background: var(--sunken);
+  border-bottom: 1px solid var(--hair);
+}
+.mcard .nm { font-size: 12px; font-weight: 700; margin-top: 6px; padding: 0 4px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* kg entry panel */
+.entry .pair { font-size: 13px; color: var(--ink2); margin-bottom: 2px; font-weight:600; }
+.entry .last { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.stepper { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 12px; }
+.stepper .btn {
+  width: 56px; height: 56px; border-radius: 50%; flex:none;
+  background: var(--sunken); border:1px solid var(--hair);
+  font-size: 22px; font-weight: 700; color: var(--ink2);
+}
+.stepper .btn:active { background: var(--accent-soft); }
+.stepper .mid { flex:1; text-align:center; }
+.stepper .val {
+  font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing:-0.01em;
+  background:none; border:none; text-align:center; width: 100%; color: var(--ink);
+}
+.stepper .val:focus { outline:none; }
+.stepper .unit { font-size: 12px; color: var(--muted); letter-spacing:.08em; }
+.stepper.small .btn { width: 40px; height: 40px; font-size: 18px; }
+.stepper.small .val { font-size: 26px; }
+.save-btn {
+  width: 100%; padding: 14px; border-radius: 12px;
+  background: var(--accent); color: var(--on-accent);
+  font-size: 16px; font-weight: 800; letter-spacing: .1em;
+}
+.save-btn:active { opacity:.85; }
+
+/* record rows */
+.rrow { display:flex; align-items:center; gap:9px; padding: 10px 2px; }
+.rrow + .rrow { border-top: 1px solid var(--grid); }
+.rrow .dot { width: 9px; height: 9px; border-radius:50%; flex:none; }
+.rrow .who { font-size: 14px; font-weight: 700; flex:none; }
+.rrow .what { font-size: 13px; color: var(--ink2); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rrow .kg { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; flex:none; }
+.rrow .kg small { font-weight: 400; color: var(--muted); }
+.rrow .tm { font-size: 11px; color: var(--muted); flex:none; width: 38px; text-align:right; }
+.del { font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 8px; flex:none; }
+.del.armed { color: var(--on-accent); background: var(--danger); font-weight:700; }
+
+/* dashboard */
+.tiles { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.tile { background: var(--surface); border:1px solid var(--hair); border-radius: 12px; padding: 11px 12px; }
+.tile .who { display:flex; align-items:center; gap:6px; font-size: 13px; font-weight:700; margin-bottom:6px; }
+.tile .big { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tile .big small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.tile .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.chart-box { position: relative; }
+.chart-box svg { display:block; width: 100%; height: auto; }
+.tooltip {
+  position:absolute; pointer-events:none; z-index: 5;
+  background: var(--ink); color: var(--page);
+  font-size: 12px; padding: 6px 9px; border-radius: 7px; white-space:nowrap;
+  transform: translate(-50%, -120%); opacity: 0; transition: opacity .1s;
+}
+.legend { display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 8px; }
+.lg {
+  display:flex; align-items:center; gap:6px; font-size: 12px; font-weight:600; color: var(--ink2);
+  padding: 5px 10px; border-radius: 999px; background: var(--sunken);
+}
+.lg.off { opacity: .38; }
+.lg .dot { width: 9px; height: 9px; border-radius:50%; }
+table.data { width:100%; border-collapse:collapse; font-size: 13px; }
+table.data th { text-align:left; font-size: 11px; color: var(--muted); font-weight:600; padding: 6px 4px; border-bottom:1px solid var(--grid); }
+table.data td { padding: 7px 4px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+table.data td .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+
+/* manage lists */
+.addrow { display:flex; gap:8px; }
+.addrow input[type=text] {
+  flex:1; min-width:0; font-size: 16px; padding: 10px 12px;
+  background: var(--sunken); border: 1px solid var(--hair); border-radius: 10px;
+}
+.addrow input:focus { outline: 2px solid var(--accent); outline-offset:-1px; }
+.addrow .go { padding: 10px 16px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 700; flex:none; }
+.mrow { display:flex; align-items:center; gap:11px; padding: 10px 2px; }
+.mrow + .mrow { border-top: 1px solid var(--grid); }
+.mrow .thumb { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; flex:none; background: var(--sunken); }
+.mrow .thumb-empty { width:54px; height:54px; border-radius:10px; flex:none; background:var(--sunken);
+  display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--muted); font-size:20px; }
+.mrow .info { flex:1; min-width:0; }
+.mrow .nm { font-size: 15px; font-weight: 700; }
+.mrow .ct { font-size: 12px; color: var(--muted); margin-top:2px; }
+.mrow .act { font-size: 12px; color: var(--accent); font-weight:600; padding: 6px 8px; flex:none; }
+.photo-pick {
+  width: 74px; height: 74px; border-radius: 12px; flex:none;
+  background: var(--sunken); border: 1.5px dashed var(--base);
+  display:flex; align-items:center; justify-content:center; font-size: 24px;
+  overflow:hidden;
+}
+.photo-pick img { width:100%; height:100%; object-fit:cover; }
+
+.empty { text-align:center; color: var(--muted); font-size: 13px; padding: 26px 10px; line-height: 1.7; }
+.empty .jump { color: var(--accent); font-weight: 700; }
+
+.go.alt { background: var(--sunken); color: var(--ink); border: 1px solid var(--hair); }
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 40;
+  display: flex; align-items: center; justify-content: center; padding: 18px;
+}
+.modal {
+  background: var(--surface); border-radius: 14px; padding: 14px;
+  width: 100%; max-width: 430px;
+}
+.modal h2 { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+.modal textarea {
+  width: 100%; height: 170px; font-size: 12px; font-family: inherit;
+  background: var(--sunken); border: 1px solid var(--hair); border-radius: 10px;
+  padding: 9px; color: var(--ink); resize: none; word-break: break-all;
+}
+.modal .hint { margin: 8px 0 10px; }
+.modal .row { display: flex; gap: 8px; }
+.modal .row .go { flex: 1; padding: 11px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 700; }
+
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  background: var(--ink); color: var(--page);
+  font-size: 14px; font-weight: 600; padding: 10px 18px; border-radius: 999px;
+  opacity: 0; transition: opacity .2s, translate .2s; pointer-events: none; z-index: 30;
+  white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+}
+#toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar"><h1>🏋️ 重訓記錄</h1><span class="date" id="topdate"></span></div>
+  <main id="view"></main>
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="log"><span class="ic">✏️</span>記錄</button>
+    <button data-tab="dash"><span class="ic">📈</span>圖表</button>
+    <button data-tab="mach"><span class="ic">🏋️</span>器材</button>
+    <button data-tab="ppl"><span class="ic">👥</span>成員</button>
+  </nav>
+</div>
+<div id="modal-root"></div>
+<div id="toast"></div>
+<input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="import-input" accept="application/json,.json" style="display:none">
+
+<script>
+'use strict';
+/* ── 資料層(IndexedDB)── */
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('gym-log', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('kv');
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function idbGet(k) {
+  const d = await dbp;
+  return new Promise((res, rej) => {
+    const q = d.transaction('kv').objectStore('kv').get(k);
+    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+  });
+}
+async function idbSet(k, v) {
+  const d = await dbp;
+  return new Promise((res, rej) => {
+    const q = d.transaction('kv', 'readwrite').objectStore('kv').put(v, k);
+    q.onsuccess = () => res(); q.onerror = () => rej(q.error);
+  });
+}
+
+let state = { people: [], machines: [], records: [] };
+function saveState() { idbSet('state', state).catch(e => console.error('save failed', e)); }
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/* ── 小工具 ── */
+const WD = ['日','一','二','三','四','五','六'];
+const fmtD = ts => { const d = new Date(ts); return `${d.getMonth()+1}/${d.getDate()}`; };
+const fmtDW = ts => { const d = new Date(ts); return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`; };
+const fmtT = ts => { const d = new Date(ts); return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`; };
+const fmtKg = k => (Math.round(k * 10) / 10).toString();
+const person = id => state.people.find(p => p.id === id);
+const machine = id => state.machines.find(m => m.id === id);
+const pColor = p => `var(--p${p.slot % 7})`;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 1800);
+}
+function backupNudge() {
+  const last = state.meta && state.meta.lastBackup;
+  if (!last || Date.now() - last > 3 * 86400000) {
+    setTimeout(() => toast('小提醒:練完用「複製備份文字」存到備忘錄 📋'), 2300);
+  }
+}
+function armDelete(btn, fn) {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.armed) { fn(); return; }
+    btn.dataset.armed = '1';
+    const orig = btn.textContent;
+    btn.textContent = '確定刪除?';
+    btn.classList.add('armed');
+    setTimeout(() => {
+      if (document.body.contains(btn)) {
+        delete btn.dataset.armed;
+        btn.textContent = orig;
+        btn.classList.remove('armed');
+      }
+    }, 2600);
+  });
+}
+
+/* ── 拍照(壓縮後存 dataURL)── */
+let photoCb = null;
+const photoInput = document.getElementById('photo-input');
+photoInput.addEventListener('change', () => {
+  const f = photoInput.files[0];
+  photoInput.value = '';
+  if (!f || !photoCb) return;
+  const img = new Image();
+  const url = URL.createObjectURL(f);
+  img.onload = () => {
+    const s = Math.min(1, 640 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    const cb = photoCb; photoCb = null;
+    cb(c.toDataURL('image/jpeg', 0.78));
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('照片讀取失敗'); };
+  img.src = url;
+});
+function pickPhoto(cb) { photoCb = cb; photoInput.click(); }
+
+/* ── 備份匯入 ── */
+const importInput = document.getElementById('import-input');
+importInput.addEventListener('change', async () => {
+  const f = importInput.files[0];
+  importInput.value = '';
+  if (!f) return;
+  try {
+    const st = JSON.parse(await f.text());
+    if (!Array.isArray(st.people) || !Array.isArray(st.machines) || !Array.isArray(st.records)) throw new Error('bad');
+    st.machines.forEach(m => { if (!m.mode) m.mode = 'weight'; });
+    state = st;
+    saveState();
+    render();
+    toast(`已還原 ✓ ${st.people.length} 成員 · ${st.machines.length} 器材 · ${st.records.length} 筆記錄`);
+  } catch {
+    toast('檔案格式不對,無法匯入');
+  }
+});
+async function exportBackup() {
+  const d = new Date();
+  const name = `重訓記錄備份-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+  const file = new File([JSON.stringify(state)], name, { type: 'application/json' });
+  // 優先用系統分享選單(可直接選 Google Drive / 儲存到檔案)
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: name });
+      toast('選「雲端硬碟 Drive」或「儲存到檔案」☁️');
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // 使用者自己取消分享
+    }
+  }
+  // 手機上分享被擋(例如嵌在框架內)時,下載通常也會被擋 → 改開複製視窗
+  if ('ontouchstart' in window) { showBackupModal('copy'); return; }
+  // 電腦:一般下載
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('備份檔已下載 ⬆️');
+}
+
+/* 備份文字視窗:copy=顯示並複製備份文字, paste=貼上還原 */
+function showBackupModal(mode) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="overlay" id="bk-ovl"><div class="modal">
+    <h2>${mode === 'copy' ? '📋 複製備份文字' : '📥 貼上備份還原'}</h2>
+    <textarea id="bk-text" ${mode === 'copy' ? 'readonly' : ''} placeholder="${mode === 'paste' ? '長按這裡 → 貼上之前存的備份文字' : ''}"></textarea>
+    <div class="hint">${mode === 'copy'
+      ? '按「複製」後,貼到 <b>備忘錄</b>(會自動同步 iCloud)或 <b>Google Keep / 寄給自己</b> 保存。要還原時再用「貼上還原」。'
+      : '把之前保存的整段備份文字貼進來,按「還原」(會覆蓋目前資料)。'}</div>
+    <div class="row">
+      <button class="go" id="bk-act">${mode === 'copy' ? '複製全部' : '還 原'}</button>
+      <button class="go alt" id="bk-close" style="flex:0 0 90px">關閉</button>
+    </div>
+  </div></div>`;
+  const ta = document.getElementById('bk-text');
+  if (mode === 'copy') ta.value = JSON.stringify(state);
+  const close = () => { root.innerHTML = ''; };
+  document.getElementById('bk-close').addEventListener('click', close);
+  document.getElementById('bk-ovl').addEventListener('click', e => { if (e.target.id === 'bk-ovl') close(); });
+  document.getElementById('bk-act').addEventListener('click', async () => {
+    if (mode === 'copy') {
+      ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+      let ok = false;
+      try { await navigator.clipboard.writeText(ta.value); ok = true; }
+      catch { try { ok = document.execCommand('copy'); } catch { ok = false; } }
+      toast(ok ? '已複製 ✓ 去貼到備忘錄保存吧' : '請長按文字框 → 全選 → 複製');
+      if (ok) {
+        state.meta = Object.assign({}, state.meta, { lastBackup: Date.now() });
+        saveState();
+      }
+    } else {
+      try {
+        const st = JSON.parse(ta.value.trim());
+        if (!Array.isArray(st.people) || !Array.isArray(st.machines) || !Array.isArray(st.records)) throw new Error('bad');
+        st.machines.forEach(m => { if (!m.mode) m.mode = 'weight'; });
+        state = st;
+        saveState();
+        close();
+        render();
+        toast(`已還原 ✓ ${st.people.length} 成員 · ${st.machines.length} 器材 · ${st.records.length} 筆記錄`);
+      } catch {
+        toast('內容不是有效的備份文字');
+      }
+    }
+  });
+}
+
+/* ── UI 狀態 ── */
+let tab = 'log';
+let selPerson = null, selMachine = null;
+let dashMachine = null;
+let hiddenPeople = new Set();
+let pendingPhoto = null; // 新增器材時暫存的照片
+let pendingMode = 'weight'; // 新增器材的類型:weight(重量) / cardio(有氧:速度+斜度)
+
+/* ── 主渲染 ── */
+const view = document.getElementById('view');
+function render() {
+  document.querySelectorAll('#tabbar button').forEach(b =>
+    b.classList.toggle('on', b.dataset.tab === tab));
+  if (tab === 'log') renderLog();
+  else if (tab === 'dash') renderDash();
+  else if (tab === 'mach') renderMach();
+  else renderPpl();
+}
+document.getElementById('tabbar').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  tab = b.dataset.tab;
+  render();
+});
+function jumpTo(t) { tab = t; render(); }
+
+/* ══ 記錄頁 ══ */
+function lastRec(personId, machineId) {
+  for (let i = state.records.length - 1; i >= 0; i--) {
+    const r = state.records[i];
+    if (r.personId === personId && r.machineId === machineId) return r;
+  }
+  return null;
+}
+function renderLog() {
+  if (state.people.length === 0 || state.machines.length === 0) {
+    view.innerHTML = `<div class="card"><div class="empty">
+      開始之前,先完成兩件事:<br>
+      ${state.people.length === 0 ? '① 到 <button class="jump" data-j="ppl">「成員」</button> 新增使用的人<br>' : ''}
+      ${state.machines.length === 0 ? `${state.people.length === 0 ? '②' : '①'} 到 <button class="jump" data-j="mach">「器材」</button> 新增重訓器材(可拍照)` : ''}
+      <br><br>之前有存過備份?<button class="jump" data-res="1">📥 貼上還原</button>
+    </div></div>`;
+    view.querySelectorAll('.jump').forEach(b =>
+      b.addEventListener('click', () => b.dataset.res ? showBackupModal('paste') : jumpTo(b.dataset.j)));
+    return;
+  }
+  if (!selPerson || !person(selPerson)) selPerson = state.people[0].id;
+  const m = selMachine && machine(selMachine);
+
+  let html = `<div class="section-label">誰在練?</div>
+  <div class="chips" id="p-chips">` +
+    state.people.map(p => `<button class="chip ${p.id===selPerson?'on':''}" data-id="${p.id}">
+      <span class="dot" style="background:${pColor(p)}"></span>${esc(p.name)}</button>`).join('') +
+  `</div>
+  <div class="section-label" style="margin-top:14px">用哪台器材?</div>
+  <div class="mgrid" id="m-grid">` +
+    state.machines.map(mc => `<button class="mcard ${mc.id===selMachine?'on':''}" data-id="${mc.id}">
+      ${mc.photo ? `<img class="ph" src="${mc.photo}" alt="">`
+                 : `<div class="ph-empty">${esc(mc.name.slice(0,1))}</div>`}
+      <div class="nm">${esc(mc.name)}</div></button>`).join('') +
+  `</div>`;
+
+  if (m) {
+    const last = lastRec(selPerson, selMachine);
+    const cardio = m.mode === 'cardio';
+    if (cardio) {
+      const sp0 = last && last.speed != null ? last.speed : 8;
+      const ic0 = last && last.incline != null ? last.incline : 0;
+      const mn0 = last && last.mins ? last.mins : 30;
+      html += `<div class="card entry" style="margin-top:14px">
+        <div class="pair">${esc(person(selPerson).name)} · ${esc(m.name)}</div>
+        <div class="last">${last && last.speed != null ? `上次:${fmtDW(last.ts)} 速度 ${fmtKg(last.speed)} km/h · 斜度 ${fmtKg(last.incline||0)}${last.mins?` · ${last.mins} 分`:''}` : '第一次使用這台器材'}</div>
+        <div class="stepper">
+          <button class="btn" id="sp-minus">−0.5</button>
+          <div class="mid">
+            <input class="val" id="sp-val" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(sp0)}">
+            <div class="unit">速度 KM/H</div>
+          </div>
+          <button class="btn" id="sp-plus">+0.5</button>
+        </div>
+        <div class="stepper small">
+          <button class="btn" id="ic-minus">−</button>
+          <div class="mid">
+            <input class="val" id="ic-val" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(ic0)}">
+            <div class="unit">斜度(%)</div>
+          </div>
+          <button class="btn" id="ic-plus">＋</button>
+        </div>
+        <div class="stepper small">
+          <button class="btn" id="mn-minus">−5</button>
+          <div class="mid">
+            <input class="val" id="mn-val" type="number" inputmode="numeric" step="5" min="0" value="${mn0}">
+            <div class="unit">時間(分)</div>
+          </div>
+          <button class="btn" id="mn-plus">+5</button>
+        </div>
+        <button class="save-btn" id="save-rec">記 錄</button>
+      </div>`;
+    } else {
+      const kg0 = last && last.kg != null ? last.kg : 20, reps0 = last ? (last.reps || 10) : 10;
+      html += `<div class="card entry" style="margin-top:14px">
+        <div class="pair">${esc(person(selPerson).name)} · ${esc(m.name)}</div>
+        <div class="last">${last && last.kg != null ? `上次:${fmtDW(last.ts)} ${fmtKg(last.kg)} kg${last.reps?` × ${last.reps} 下`:''}` : '第一次使用這台器材'}</div>
+        <div class="stepper">
+          <button class="btn" id="kg-minus">−2.5</button>
+          <div class="mid">
+            <input class="val" id="kg-val" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(kg0)}">
+            <div class="unit">公斤 KG</div>
+          </div>
+          <button class="btn" id="kg-plus">+2.5</button>
+        </div>
+        <div class="stepper small">
+          <button class="btn" id="rp-minus">−</button>
+          <div class="mid">
+            <input class="val" id="rp-val" type="number" inputmode="numeric" step="1" min="0" value="${reps0}">
+            <div class="unit">次數(下)</div>
+          </div>
+          <button class="btn" id="rp-plus">＋</button>
+        </div>
+        <button class="save-btn" id="save-rec">記 錄</button>
+      </div>`;
+    }
+  }
+
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  const recent = state.records.slice().sort((a, b) => b.ts - a.ts).slice(0, 12);
+  html += `<div class="card" style="margin-top:14px"><h2>最近記錄</h2><div id="recent">` +
+    (recent.length === 0 ? '<div class="empty">還沒有任何記錄</div>' :
+      recent.map(r => {
+        const p = person(r.personId), mc = machine(r.machineId);
+        if (!p || !mc) return '';
+        const valH = r.speed != null
+          ? `${fmtKg(r.speed)}<small> km/h·斜${fmtKg(r.incline||0)}</small>`
+          : `${fmtKg(r.kg)}<small> kg${r.reps?` ×${r.reps}`:''}</small>`;
+        return `<div class="rrow" data-id="${r.id}">
+          <span class="dot" style="background:${pColor(p)}"></span>
+          <span class="who">${esc(p.name)}</span>
+          <span class="what">${esc(mc.name)}</span>
+          <span class="kg">${valH}</span>
+          <span class="tm">${r.ts >= today0.getTime() ? fmtT(r.ts) : fmtD(r.ts)}</span>
+          <button class="del">刪除</button>
+        </div>`;
+      }).join('')) +
+  `</div></div>`;
+
+  view.innerHTML = html;
+
+  view.querySelectorAll('#p-chips .chip').forEach(c =>
+    c.addEventListener('click', () => { selPerson = c.dataset.id; renderLog(); }));
+  view.querySelectorAll('#m-grid .mcard').forEach(c =>
+    c.addEventListener('click', () => {
+      selMachine = (selMachine === c.dataset.id) ? null : c.dataset.id;
+      renderLog();
+      if (selMachine) {
+        const panel = view.querySelector('.entry');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }));
+
+  const bump = (inp, d, dec) => {
+    let v = parseFloat(inp.value) || 0;
+    v = Math.max(0, v + d);
+    inp.value = dec ? fmtKg(v) : Math.round(v);
+  };
+  const kgV = view.querySelector('#kg-val'), rpV = view.querySelector('#rp-val');
+  if (kgV) {
+    view.querySelector('#kg-minus').addEventListener('click', () => bump(kgV, -2.5, true));
+    view.querySelector('#kg-plus').addEventListener('click', () => bump(kgV, 2.5, true));
+    view.querySelector('#rp-minus').addEventListener('click', () => bump(rpV, -1, false));
+    view.querySelector('#rp-plus').addEventListener('click', () => bump(rpV, 1, false));
+    view.querySelector('#save-rec').addEventListener('click', () => {
+      const kg = parseFloat(kgV.value), reps = parseInt(rpV.value) || 0;
+      if (!(kg > 0)) { toast('請輸入公斤數'); return; }
+      state.records.push({ id: uid(), personId: selPerson, machineId: selMachine, kg, reps, ts: Date.now() });
+      saveState();
+      toast(`已記錄 ✓ ${person(selPerson).name} · ${machine(selMachine).name} ${fmtKg(kg)}kg`);
+      backupNudge();
+      renderLog();
+    });
+  }
+  const spV = view.querySelector('#sp-val'), icV = view.querySelector('#ic-val'), mnV = view.querySelector('#mn-val');
+  if (spV) {
+    view.querySelector('#sp-minus').addEventListener('click', () => bump(spV, -0.5, true));
+    view.querySelector('#sp-plus').addEventListener('click', () => bump(spV, 0.5, true));
+    view.querySelector('#ic-minus').addEventListener('click', () => bump(icV, -0.5, true));
+    view.querySelector('#ic-plus').addEventListener('click', () => bump(icV, 0.5, true));
+    view.querySelector('#mn-minus').addEventListener('click', () => bump(mnV, -5, false));
+    view.querySelector('#mn-plus').addEventListener('click', () => bump(mnV, 5, false));
+    view.querySelector('#save-rec').addEventListener('click', () => {
+      const speed = parseFloat(spV.value);
+      const incline = parseFloat(icV.value) || 0;
+      const mins = parseInt(mnV.value) || 0;
+      if (!(speed > 0)) { toast('請輸入速度'); return; }
+      state.records.push({ id: uid(), personId: selPerson, machineId: selMachine, speed, incline, mins, ts: Date.now() });
+      saveState();
+      toast(`已記錄 ✓ ${person(selPerson).name} · ${machine(selMachine).name} ${fmtKg(speed)}km/h 斜${fmtKg(incline)}`);
+      backupNudge();
+      renderLog();
+    });
+  }
+
+  view.querySelectorAll('#recent .del').forEach(btn => {
+    armDelete(btn, () => {
+      const id = btn.closest('.rrow').dataset.id;
+      state.records = state.records.filter(r => r.id !== id);
+      saveState(); renderLog();
+    });
+  });
+}
+
+/* ══ 圖表頁 ══ */
+function renderDash() {
+  if (state.records.length === 0) {
+    view.innerHTML = `<div class="card"><div class="empty">還沒有記錄,先到「記錄」頁記下第一筆,<br>這裡就會出現每個人的進步曲線 📈</div></div>`;
+    return;
+  }
+  if (!dashMachine || !machine(dashMachine) ||
+      !state.records.some(r => r.machineId === dashMachine)) {
+    dashMachine = state.records[state.records.length - 1].machineId;
+  }
+  const usedMachines = state.machines.filter(mc => state.records.some(r => r.machineId === mc.id));
+
+  let html = `<div class="section-label">選擇器材</div>
+  <div class="chips" id="d-chips">` +
+    usedMachines.map(mc => `<button class="chip ${mc.id===dashMachine?'on':''}" data-id="${mc.id}">
+      ${mc.photo ? `<img src="${mc.photo}" alt="">` : ''}${esc(mc.name)}</button>`).join('') +
+  `</div>`;
+
+  const mcSel = machine(dashMachine);
+  const cardio = mcSel.mode === 'cardio';
+  const val = r => cardio ? r.speed : r.kg;
+  const unit = cardio ? 'km/h' : 'kg';
+  const recs = state.records.filter(r => r.machineId === dashMachine && val(r) != null).sort((a,b) => a.ts - b.ts);
+  const byP = new Map();
+  for (const r of recs) {
+    if (!byP.has(r.personId)) byP.set(r.personId, []);
+    byP.get(r.personId).push(r);
+  }
+  const pids = [...byP.keys()].filter(id => person(id));
+
+  // 統計小卡
+  html += `<div class="tiles" style="margin-top:12px">` + pids.map(id => {
+    const p = person(id), arr = byP.get(id);
+    const latest = val(arr[arr.length-1]), max = Math.max(...arr.map(val));
+    return `<div class="tile">
+      <div class="who"><span class="dot" style="background:${pColor(p)};width:9px;height:9px;border-radius:50%"></span>${esc(p.name)}</div>
+      <div class="big">${fmtKg(latest)}<small> ${unit} 最新</small></div>
+      <div class="sub">${cardio?'最快':'最高'} ${fmtKg(max)} ${unit} · 共 ${arr.length} 次</div>
+    </div>`;
+  }).join('') + `</div>`;
+
+  // 圖表
+  html += `<div class="card"><h2>${esc(mcSel.name)} — 逐次${cardio?'速度(km/h)':'重量(kg)'}</h2>`;
+  if (pids.length > 1) {
+    html += `<div class="legend" id="legend">` + pids.map(id => {
+      const p = person(id);
+      return `<button class="lg ${hiddenPeople.has(id)?'off':''}" data-id="${id}">
+        <span class="dot" style="background:${pColor(p)}"></span>${esc(p.name)}</button>`;
+    }).join('') + `</div>`;
+  }
+  html += `<div class="chart-box"><div class="tooltip" id="tooltip"></div>
+    <svg id="chart" viewBox="0 0 360 235" role="img" aria-label="逐次重量折線圖"></svg></div></div>`;
+
+  // 數據表
+  const tableRecs = recs.slice().reverse().slice(0, 12);
+  html += `<div class="card"><h2>明細</h2>
+    <div style="overflow-x:auto"><table class="data">
+    <thead><tr><th>日期</th><th>成員</th>` +
+    (cardio
+      ? `<th style="text-align:right">速度</th><th style="text-align:right">斜度</th><th style="text-align:right">分鐘</th>`
+      : `<th style="text-align:right">公斤</th><th style="text-align:right">次數</th>`) +
+    `</tr></thead>
+    <tbody>` + tableRecs.map(r => {
+      const p = person(r.personId);
+      if (!p) return '';
+      const cells = cardio
+        ? `<td style="text-align:right">${fmtKg(r.speed)}</td>
+           <td style="text-align:right">${fmtKg(r.incline||0)}</td>
+           <td style="text-align:right">${r.mins || '—'}</td>`
+        : `<td style="text-align:right">${fmtKg(r.kg)}</td>
+           <td style="text-align:right">${r.reps || '—'}</td>`;
+      return `<tr><td>${fmtDW(r.ts)}</td>
+        <td><span class="dot" style="background:${pColor(p)}"></span>${esc(p.name)}</td>
+        ${cells}</tr>`;
+    }).join('') + `</tbody></table></div></div>`;
+
+  view.innerHTML = html;
+
+  view.querySelectorAll('#d-chips .chip').forEach(c =>
+    c.addEventListener('click', () => { dashMachine = c.dataset.id; renderDash(); }));
+  view.querySelectorAll('#legend .lg').forEach(c =>
+    c.addEventListener('click', () => {
+      const id = c.dataset.id;
+      if (hiddenPeople.has(id)) hiddenPeople.delete(id); else hiddenPeople.add(id);
+      renderDash();
+    }));
+
+  drawChart(byP, pids.filter(id => !hiddenPeople.has(id)), cardio);
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+function niceStep(raw) {
+  const c = [0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100];
+  for (const s of c) if (s >= raw) return s;
+  return 100;
+}
+function drawChart(byP, pids, cardio) {
+  const v = r => cardio ? r.speed : r.kg;
+  const svg = document.getElementById('chart');
+  svg.innerHTML = '';
+  const W = 360, H = 235, padL = 34, padR = 56, padT = 12, padB = 24;
+  const all = pids.flatMap(id => byP.get(id));
+  if (all.length === 0) {
+    const t = svgEl('text', { x: W/2, y: H/2, 'text-anchor':'middle', fill:'var(--muted)', 'font-size':13 });
+    t.textContent = '沒有可顯示的資料';
+    svg.appendChild(t);
+    return;
+  }
+  let tmin = Math.min(...all.map(r => r.ts)), tmax = Math.max(...all.map(r => r.ts));
+  if (tmax - tmin < 3600000) { tmin -= 43200000; tmax += 43200000; }
+  const kmin0 = Math.min(...all.map(v)), kmax0 = Math.max(...all.map(v));
+  const span = Math.max(kmax0 - kmin0, cardio ? 2 : 5);
+  const step = niceStep(span / 3.5);
+  const ymin = Math.max(0, Math.floor((kmin0 - span * 0.1) / step) * step);
+  const ymax = Math.ceil((kmax0 + span * 0.1) / step) * step;
+  const x = t => padL + (W - padL - padR) * (t - tmin) / (tmax - tmin);
+  const y = k => padT + (H - padT - padB) * (1 - (k - ymin) / (ymax - ymin));
+
+  for (let v = ymin; v <= ymax + 0.001; v += step) {
+    const gy = y(v);
+    svg.appendChild(svgEl('line', { x1: padL, x2: W - padR, y1: gy, y2: gy,
+      stroke: v === ymin ? 'var(--base)' : 'var(--grid)', 'stroke-width': 1 }));
+    const t = svgEl('text', { x: padL - 5, y: gy + 4, 'text-anchor': 'end',
+      fill: 'var(--muted)', 'font-size': 10 });
+    t.textContent = fmtKg(v);
+    svg.appendChild(t);
+  }
+  [tmin, (tmin + tmax) / 2, tmax].forEach((tt, i) => {
+    const t = svgEl('text', { x: x(tt), y: H - 6,
+      'text-anchor': i === 0 ? 'start' : i === 2 ? 'end' : 'middle',
+      fill: 'var(--muted)', 'font-size': 10 });
+    t.textContent = fmtD(tt);
+    svg.appendChild(t);
+  });
+
+  const hitPoints = [];
+  const labels = [];
+  for (const id of pids) {
+    const p = person(id), arr = byP.get(id), col = pColor(p);
+    if (arr.length > 1) {
+      const dPath = arr.map((r, i) => `${i ? 'L' : 'M'}${x(r.ts).toFixed(1)},${y(v(r)).toFixed(1)}`).join('');
+      svg.appendChild(svgEl('path', { d: dPath, fill: 'none', stroke: col,
+        'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    }
+    arr.forEach((r, i) => {
+      const last = i === arr.length - 1;
+      svg.appendChild(svgEl('circle', { cx: x(r.ts), cy: y(v(r)), r: last ? 4.5 : 3.5,
+        fill: col, stroke: 'var(--surface)', 'stroke-width': 2 }));
+      hitPoints.push({ px: x(r.ts), py: y(v(r)), r, p });
+    });
+    const lastR = arr[arr.length - 1];
+    labels.push({ y: y(v(lastR)), name: p.name });
+  }
+  labels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labels.length; i++)
+    if (labels[i].y - labels[i-1].y < 13) labels[i].y = labels[i-1].y + 13;
+  for (const lb of labels) {
+    const t = svgEl('text', { x: W - padR + 8, y: Math.min(H - padB - 2, Math.max(padT + 8, lb.y)) + 4,
+      fill: 'var(--ink2)', 'font-size': 11, 'font-weight': 600 });
+    t.textContent = lb.name;
+    svg.appendChild(t);
+  }
+
+  const tip = document.getElementById('tooltip');
+  svg.addEventListener('pointerdown', e => {
+    const box = svg.getBoundingClientRect();
+    const vx = (e.clientX - box.left) * W / box.width;
+    const vy = (e.clientY - box.top) * H / box.height;
+    let best = null, bd = 26;
+    for (const hp of hitPoints) {
+      const d = Math.hypot(hp.px - vx, hp.py - vy);
+      if (d < bd) { bd = d; best = hp; }
+    }
+    if (!best) { tip.style.opacity = 0; return; }
+    tip.innerHTML = cardio
+      ? `${esc(best.p.name)} ${fmtDW(best.r.ts)}<br><strong>${fmtKg(best.r.speed)} km/h</strong> · 斜度 ${fmtKg(best.r.incline||0)}${best.r.mins ? ` · ${best.r.mins} 分` : ''}`
+      : `${esc(best.p.name)} ${fmtDW(best.r.ts)}<br><strong>${fmtKg(best.r.kg)} kg</strong>${best.r.reps ? ` × ${best.r.reps} 下` : ''}`;
+    tip.style.left = (best.px / W * box.width) + 'px';
+    tip.style.top = (best.py / H * box.height) + 'px';
+    tip.style.opacity = 1;
+    clearTimeout(tip._h);
+    tip._h = setTimeout(() => tip.style.opacity = 0, 2600);
+  });
+}
+
+/* ══ 器材頁 ══ */
+function renderMach() {
+  let html = `<div class="card"><h2>新增器材</h2>
+    <div class="chips" style="margin-bottom:11px">
+      <button class="chip ${pendingMode==='weight'?'on':''}" id="mode-w">🏋️ 重量訓練(kg)</button>
+      <button class="chip ${pendingMode==='cardio'?'on':''}" id="mode-c">🏃 跑步機/有氧(速度·斜度)</button>
+    </div>
+    <div style="display:flex; gap:12px; align-items:center">
+      <button class="photo-pick" id="new-photo" aria-label="拍照">
+        ${pendingPhoto ? `<img src="${pendingPhoto}" alt="">` : '📷'}
+      </button>
+      <div style="flex:1; display:flex; flex-direction:column; gap:8px">
+        <input type="text" id="new-mname" placeholder="器材名稱,例:腿推機"
+          style="font-size:16px; padding:10px 12px; background:var(--sunken); border:1px solid var(--hair); border-radius:10px; width:100%">
+        <button class="go" id="add-mach" style="padding:10px; border-radius:10px; background:var(--accent); color:var(--on-accent); font-weight:700">＋ 加入器材</button>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:9px">點相機圖示可直接拍下器材照片,之後在記錄頁一眼認出它。</div>
+  </div>`;
+
+  html += `<div class="card"><h2>我的器材(${state.machines.length})</h2><div id="mlist">` +
+    (state.machines.length === 0 ? '<div class="empty">還沒有器材</div>' :
+      state.machines.map(mc => {
+        const n = state.records.filter(r => r.machineId === mc.id).length;
+        return `<div class="mrow" data-id="${mc.id}">
+          ${mc.photo ? `<img class="thumb" src="${mc.photo}" alt="">`
+                     : `<div class="thumb-empty">${esc(mc.name.slice(0,1))}</div>`}
+          <div class="info"><div class="nm">${esc(mc.name)}</div><div class="ct">${mc.mode==='cardio'?'🏃 有氧':'🏋️ 重量'} · ${n} 筆記錄</div></div>
+          <button class="act mode">改類型</button>
+          <button class="act photo">📷</button>
+          <button class="del">刪除</button>
+        </div>`;
+      }).join('')) +
+  `</div></div>`;
+
+  view.innerHTML = html;
+
+  view.querySelector('#mode-w').addEventListener('click', () => { pendingMode = 'weight'; renderMach(); });
+  view.querySelector('#mode-c').addEventListener('click', () => { pendingMode = 'cardio'; renderMach(); });
+  view.querySelector('#new-photo').addEventListener('click', () =>
+    pickPhoto(d => { pendingPhoto = d; renderMach(); }));
+  view.querySelector('#add-mach').addEventListener('click', () => {
+    const name = view.querySelector('#new-mname').value.trim();
+    if (!name) { toast('請輸入器材名稱'); return; }
+    state.machines.push({ id: uid(), name, photo: pendingPhoto, mode: pendingMode });
+    pendingPhoto = null; pendingMode = 'weight';
+    saveState(); toast(`已加入 ✓ ${name}`); renderMach();
+  });
+
+  view.querySelectorAll('#mlist .mrow').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('.mode').addEventListener('click', () => {
+      const mc = machine(id);
+      mc.mode = mc.mode === 'cardio' ? 'weight' : 'cardio';
+      saveState(); renderMach();
+      toast(`${mc.name} 已改為${mc.mode === 'cardio' ? '有氧(速度·斜度)' : '重量(kg)'}`);
+    });
+    row.querySelector('.photo').addEventListener('click', () =>
+      pickPhoto(d => {
+        const mc = machine(id);
+        if (mc) { mc.photo = d; saveState(); renderMach(); toast('照片已更新 ✓'); }
+      }));
+    armDelete(row.querySelector('.del'), () => {
+      state.machines = state.machines.filter(m => m.id !== id);
+      state.records = state.records.filter(r => r.machineId !== id);
+      if (selMachine === id) selMachine = null;
+      if (dashMachine === id) dashMachine = null;
+      saveState(); renderMach();
+    });
+  });
+}
+
+/* ══ 成員頁 ══ */
+function renderPpl() {
+  let html = `<div class="card"><h2>新增成員</h2>
+    <div class="addrow">
+      <input type="text" id="new-pname" placeholder="名字,例:Tina">
+      <button class="go" id="add-ppl">＋ 加入</button>
+    </div>
+  </div>
+  <div class="card"><h2>所有成員(${state.people.length})</h2><div id="plist">` +
+    (state.people.length === 0 ? '<div class="empty">還沒有成員</div>' :
+      state.people.map(p => {
+        const n = state.records.filter(r => r.personId === p.id).length;
+        return `<div class="mrow" data-id="${p.id}">
+          <div class="thumb-empty" style="border-radius:50%; background:${pColor(p)}; color:#fff">${esc(p.name.slice(0,1))}</div>
+          <div class="info"><div class="nm">${esc(p.name)}</div><div class="ct">${n} 筆記錄</div></div>
+          <button class="del">刪除</button>
+        </div>`;
+      }).join('')) +
+  `</div></div>
+  <div class="card"><h2>備份(存雲端保平安)</h2>
+    <div class="addrow">
+      <button class="go" id="cpy" style="flex:1">📋 複製備份文字</button>
+      <button class="go alt" id="pst" style="flex:1">📥 貼上還原</button>
+    </div>
+    <div class="addrow" style="margin-top:8px">
+      <button class="go alt" id="exp" style="flex:1">⬆️ 匯出備份檔</button>
+      <button class="go alt" id="imp" style="flex:1">⬇️ 匯入備份檔</button>
+    </div>
+    <div class="hint" style="margin-top:9px">最簡單:「複製備份文字」→ 貼到 <b>備忘錄</b>(自動同步 iCloud)或 Google Keep。要還原時用「貼上還原」。<br>「匯出/匯入備份檔」是檔案版,若手機上按了沒反應,請改用複製的方式。建議每隔一陣子備份一次。</div>
+  </div>
+  <div class="hint" style="padding:0 4px">提示:資料儲存在這台裝置的瀏覽器裡。<br>把這個頁面「加入主畫面」,就能像 App 一樣使用。</div>`;
+
+  view.innerHTML = html;
+
+  view.querySelector('#exp').addEventListener('click', exportBackup);
+  view.querySelector('#imp').addEventListener('click', () => importInput.click());
+  view.querySelector('#cpy').addEventListener('click', () => showBackupModal('copy'));
+  view.querySelector('#pst').addEventListener('click', () => showBackupModal('paste'));
+
+  const add = () => {
+    const inp = view.querySelector('#new-pname');
+    const name = inp.value.trim();
+    if (!name) { toast('請輸入名字'); return; }
+    const usedSlots = state.people.map(p => p.slot % 7);
+    let slot = 0;
+    while (usedSlots.includes(slot % 7) && slot < 7) slot++;
+    state.people.push({ id: uid(), name, slot: slot % 7 });
+    inp.value = '';
+    saveState(); toast(`歡迎 ${name} 💪`); renderPpl();
+  };
+  view.querySelector('#add-ppl').addEventListener('click', add);
+  view.querySelector('#new-pname').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+
+  view.querySelectorAll('#plist .mrow').forEach(row => {
+    const id = row.dataset.id;
+    armDelete(row.querySelector('.del'), () => {
+      state.people = state.people.filter(p => p.id !== id);
+      state.records = state.records.filter(r => r.personId !== id);
+      if (selPerson === id) selPerson = null;
+      hiddenPeople.delete(id);
+      saveState(); renderPpl();
+    });
+  });
+}
+
+/* ── 啟動 ── */
+(async () => {
+  const d = new Date();
+  document.getElementById('topdate').textContent =
+    `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`;
+  try {
+    const saved = await idbGet('state');
+    if (saved && saved.people) state = saved;
+    state.machines.forEach(m => { if (!m.mode) m.mode = 'weight'; });
+  } catch (e) { console.error('load failed', e); }
+  // 盡量要求持久儲存(支援的環境會降低被系統清掉的機率)
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
+  // PWA:註冊 service worker(僅在 https 自有網域生效,離線也能開)
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('sw.js');
+    }
+  } catch {}
+  render();
+})();
+</script>
+</body>
+</html>

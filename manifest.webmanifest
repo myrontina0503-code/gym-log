@@ -1,0 +1,14 @@
+{
+  "name": "重訓記錄",
+  "short_name": "重訓記錄",
+  "description": "多成員重訓與有氧記錄,含器材照片與進步圖表",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f4f3ef",
+  "theme_color": "#c9491d",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

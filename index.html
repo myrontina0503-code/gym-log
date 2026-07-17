@@ -1068,6 +1068,9 @@ function renderPpl() {
     <div class="addrow" style="margin-top:9px">
       <button class="go" id="sync-now" style="flex:1">立即同步</button>
       <button class="go alt" id="sync-off" style="flex:1">中斷連線</button>
+    </div>
+    <div class="addrow" style="margin-top:8px">
+      <button class="go alt" id="sync-share" style="flex:1">🔗 複製一鍵連線連結(給家人 / 加主畫面用)</button>
     </div>` : `
     <div class="addrow">
       <input type="text" id="sync-key" placeholder="貼上同步金鑰">
@@ -1096,6 +1099,14 @@ function renderPpl() {
   view.querySelector('#pst').addEventListener('click', () => showBackupModal('paste'));
 
   if (syncCfg) {
+    view.querySelector('#sync-share').addEventListener('click', async () => {
+      const link = location.origin + location.pathname + '#key=' + syncCfg.token;
+      try { location.hash = 'key=' + syncCfg.token; } catch {}
+      let ok = false;
+      try { await navigator.clipboard.writeText(link); ok = true; } catch {}
+      toast(ok ? '連結已複製 ✓ 網址列也已帶上金鑰,現在可直接「加入主畫面」'
+               : '網址列已帶上金鑰,可直接「加入主畫面」或用分享傳送');
+    });
     view.querySelector('#sync-now').addEventListener('click', () => syncNow(true));
     view.querySelector('#sync-off').addEventListener('click', async () => {
       syncCfg = null;

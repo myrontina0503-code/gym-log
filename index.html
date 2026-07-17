@@ -263,7 +263,7 @@ table.data td .dot { display:inline-block; width:8px; height:8px; border-radius:
 </head>
 <body>
 <div id="app">
-  <div class="topbar"><h1>🏋️ 重訓記錄</h1><span class="date" id="topdate"></span></div>
+  <div class="topbar"><h1>🏋️ 重訓記錄</h1><span class="date"><span id="sync-dot"></span> <span id="topdate"></span></span></div>
   <main id="view"></main>
   <nav class="tabbar" id="tabbar">
     <button data-tab="log"><span class="ic">✏️</span>記錄</button>
@@ -303,6 +303,14 @@ async function idbSet(k, v) {
 
 let state = { people: [], machines: [], records: [] };
 function saveState() { idbSet('state', state).catch(e => console.error('save failed', e)); }
+/* 標記刪除(同步用墓碑,避免刪掉的東西從其他手機又跑回來) */
+function tomb(kind, ids) {
+  if (!state.deleted) state.deleted = { people: [], machines: [], records: [] };
+  if (!state.deleted[kind]) state.deleted[kind] = [];
+  for (const id of ids) if (!state.deleted[kind].includes(id)) state.deleted[kind].push(id);
+}
+/* 資料異動時用 commit:存本機 + 排程上傳 */
+function commit() { saveState(); schedulePush(); }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 /* ── 小工具 ── */
@@ -380,7 +388,7 @@ importInput.addEventListener('change', async () => {
     if (!Array.isArray(st.people) || !Array.isArray(st.machines) || !Array.isArray(st.records)) throw new Error('bad');
     st.machines.forEach(m => { if (!m.mode) m.mode = 'weight'; });
     state = st;
-    saveState();
+    commit();
     render();
     toast(`已還原 ✓ ${st.people.length} 成員 · ${st.machines.length} 器材 · ${st.records.length} 筆記錄`);
   } catch {
@@ -442,7 +450,7 @@ function showBackupModal(mode) {
       toast(ok ? '已複製 ✓ 去貼到備忘錄保存吧' : '請長按文字框 → 全選 → 複製');
       if (ok) {
         state.meta = Object.assign({}, state.meta, { lastBackup: Date.now() });
-        saveState();
+        commit();
       }
     } else {
       try {
@@ -450,7 +458,7 @@ function showBackupModal(mode) {
         if (!Array.isArray(st.people) || !Array.isArray(st.machines) || !Array.isArray(st.records)) throw new Error('bad');
         st.machines.forEach(m => { if (!m.mode) m.mode = 'weight'; });
         state = st;
-        saveState();
+        commit();
         close();
         render();
         toast(`已還原 ✓ ${st.people.length} 成員 · ${st.machines.length} 器材 · ${st.records.length} 筆記錄`);
@@ -459,6 +467,105 @@ function showBackupModal(mode) {
       }
     }
   });
+}
+
+/* ── 家人同步(以 GitHub 私人儲存庫當雲端資料庫)── */
+const SYNC_REPO = 'myrontina0503-code/gym-data';
+let syncCfg = null;   // {token} 每支手機各自輸入一次
+let syncBusy = false;
+let pushTimer = null;
+
+function setSyncDot(s) {
+  const el = document.getElementById('sync-dot');
+  if (el) el.textContent = s === 'ok' ? '☁️' : s === 'busy' ? '⏳' : s === 'err' ? '⚠️' : '';
+}
+function b64utf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+async function ghGetRemote() {
+  const h = { Authorization: `Bearer ${syncCfg.token}` };
+  const list = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/`, {
+    headers: { ...h, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+  if (list.status === 401 || list.status === 403 || list.status === 404) throw new Error('auth');
+  if (!list.ok) throw new Error('net');
+  const arr = await list.json();
+  const ent = Array.isArray(arr) ? arr.find(f => f.name === 'state.json') : null;
+  if (!ent) return { sha: null, data: null };
+  const raw = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/state.json`, {
+    headers: { ...h, Accept: 'application/vnd.github.raw' }, cache: 'no-store' });
+  if (!raw.ok) throw new Error('net');
+  return { sha: ent.sha, data: JSON.parse(await raw.text()) };
+}
+async function ghPut(sha) {
+  const body = { message: 'sync', content: b64utf8(JSON.stringify(state)) };
+  if (sha) body.sha = sha;
+  const r = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/state.json`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${syncCfg.token}`, Accept: 'application/vnd.github+json' },
+    body: JSON.stringify(body)
+  });
+  if (r.status === 409 || r.status === 422) throw new Error('conflict');
+  if (!r.ok) throw new Error('net');
+}
+/* 合併兩份資料:同 id 取較新,刪除靠墓碑,記錄依時間排序 */
+function mergeStates(a, b) {
+  const delOf = k => new Set([...((a.deleted || {})[k] || []), ...((b.deleted || {})[k] || [])]);
+  const del = { people: delOf('people'), machines: delOf('machines'), records: delOf('records') };
+  const mergeCol = (x, y, ds) => {
+    const m = new Map();
+    for (const it of [...(x || []), ...(y || [])]) {
+      if (ds.has(it.id)) continue;
+      const prev = m.get(it.id);
+      if (!prev || (it.up || 0) >= (prev.up || 0)) m.set(it.id, it);
+    }
+    return [...m.values()];
+  };
+  return {
+    people: mergeCol(a.people, b.people, del.people),
+    machines: mergeCol(a.machines, b.machines, del.machines),
+    records: mergeCol(a.records, b.records, del.records).sort((p, q) => p.ts - q.ts),
+    deleted: { people: [...del.people], machines: [...del.machines], records: [...del.records] },
+    meta: { lastBackup: Math.max(((a.meta || {}).lastBackup) || 0, ((b.meta || {}).lastBackup) || 0) }
+  };
+}
+async function syncNow(manual) {
+  if (!syncCfg || syncBusy) return;
+  syncBusy = true;
+  setSyncDot('busy');
+  try {
+    const before = JSON.stringify(state);
+    const { sha, data } = await ghGetRemote();
+    if (data) state = mergeStates(state, data);
+    saveState();
+    const after = JSON.stringify(state);
+    if (!data || after !== JSON.stringify(data)) {
+      try { await ghPut(sha); }
+      catch (e) {
+        if (e.message !== 'conflict') throw e;
+        // 另一支手機剛好也在上傳:重抓、再合併、再上傳一次
+        const r2 = await ghGetRemote();
+        if (r2.data) state = mergeStates(state, r2.data);
+        saveState();
+        await ghPut(r2.sha);
+      }
+    }
+    setSyncDot('ok');
+    if (after !== before) render();
+    if (manual) toast('已同步 ✓ ☁️');
+  } catch (e) {
+    setSyncDot('err');
+    if (manual) toast(e.message === 'auth' ? '同步金鑰無效或權限不足' : '同步失敗,請檢查網路');
+  }
+  syncBusy = false;
+}
+function schedulePush() {
+  if (!syncCfg) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => syncNow(false), 2500);
 }
 
 /* ── UI 狀態 ── */
@@ -635,7 +742,7 @@ function renderLog() {
       const kg = parseFloat(kgV.value), reps = parseInt(rpV.value) || 0;
       if (!(kg > 0)) { toast('請輸入公斤數'); return; }
       state.records.push({ id: uid(), personId: selPerson, machineId: selMachine, kg, reps, ts: Date.now() });
-      saveState();
+      commit();
       toast(`已記錄 ✓ ${person(selPerson).name} · ${machine(selMachine).name} ${fmtKg(kg)}kg`);
       backupNudge();
       renderLog();
@@ -655,7 +762,7 @@ function renderLog() {
       const mins = parseInt(mnV.value) || 0;
       if (!(speed > 0)) { toast('請輸入速度'); return; }
       state.records.push({ id: uid(), personId: selPerson, machineId: selMachine, speed, incline, mins, ts: Date.now() });
-      saveState();
+      commit();
       toast(`已記錄 ✓ ${person(selPerson).name} · ${machine(selMachine).name} ${fmtKg(speed)}km/h 斜${fmtKg(incline)}`);
       backupNudge();
       renderLog();
@@ -666,7 +773,8 @@ function renderLog() {
     armDelete(btn, () => {
       const id = btn.closest('.rrow').dataset.id;
       state.records = state.records.filter(r => r.id !== id);
-      saveState(); renderLog();
+      tomb('records', [id]);
+      commit(); renderLog();
     });
   });
 }
@@ -905,9 +1013,9 @@ function renderMach() {
   view.querySelector('#add-mach').addEventListener('click', () => {
     const name = view.querySelector('#new-mname').value.trim();
     if (!name) { toast('請輸入器材名稱'); return; }
-    state.machines.push({ id: uid(), name, photo: pendingPhoto, mode: pendingMode });
+    state.machines.push({ id: uid(), name, photo: pendingPhoto, mode: pendingMode, up: Date.now() });
     pendingPhoto = null; pendingMode = 'weight';
-    saveState(); toast(`已加入 ✓ ${name}`); renderMach();
+    commit(); toast(`已加入 ✓ ${name}`); renderMach();
   });
 
   view.querySelectorAll('#mlist .mrow').forEach(row => {
@@ -915,20 +1023,23 @@ function renderMach() {
     row.querySelector('.mode').addEventListener('click', () => {
       const mc = machine(id);
       mc.mode = mc.mode === 'cardio' ? 'weight' : 'cardio';
-      saveState(); renderMach();
+      mc.up = Date.now();
+      commit(); renderMach();
       toast(`${mc.name} 已改為${mc.mode === 'cardio' ? '有氧(速度·斜度)' : '重量(kg)'}`);
     });
     row.querySelector('.photo').addEventListener('click', () =>
       pickPhoto(d => {
         const mc = machine(id);
-        if (mc) { mc.photo = d; saveState(); renderMach(); toast('照片已更新 ✓'); }
+        if (mc) { mc.photo = d; mc.up = Date.now(); commit(); renderMach(); toast('照片已更新 ✓'); }
       }));
     armDelete(row.querySelector('.del'), () => {
+      tomb('machines', [id]);
+      tomb('records', state.records.filter(r => r.machineId === id).map(r => r.id));
       state.machines = state.machines.filter(m => m.id !== id);
       state.records = state.records.filter(r => r.machineId !== id);
       if (selMachine === id) selMachine = null;
       if (dashMachine === id) dashMachine = null;
-      saveState(); renderMach();
+      commit(); renderMach();
     });
   });
 }
@@ -952,6 +1063,18 @@ function renderPpl() {
         </div>`;
       }).join('')) +
   `</div></div>
+  <div class="card"><h2>☁️ 家人同步</h2>` + (syncCfg ? `
+    <div class="hint">已連線 — 記錄後自動上傳、打開自動下載,全家手機看到同一份資料。</div>
+    <div class="addrow" style="margin-top:9px">
+      <button class="go" id="sync-now" style="flex:1">立即同步</button>
+      <button class="go alt" id="sync-off" style="flex:1">中斷連線</button>
+    </div>` : `
+    <div class="addrow">
+      <input type="text" id="sync-key" placeholder="貼上同步金鑰">
+      <button class="go" id="sync-go">連線</button>
+    </div>
+    <div class="hint" style="margin-top:9px">貼上同步金鑰按「連線」,這支手機就會和全家共用同一份資料(自動上傳/下載)。金鑰向 Tina 索取。</div>`) + `
+  </div>
   <div class="card"><h2>備份(存雲端保平安)</h2>
     <div class="addrow">
       <button class="go" id="cpy" style="flex:1">📋 複製備份文字</button>
@@ -972,6 +1095,35 @@ function renderPpl() {
   view.querySelector('#cpy').addEventListener('click', () => showBackupModal('copy'));
   view.querySelector('#pst').addEventListener('click', () => showBackupModal('paste'));
 
+  if (syncCfg) {
+    view.querySelector('#sync-now').addEventListener('click', () => syncNow(true));
+    view.querySelector('#sync-off').addEventListener('click', async () => {
+      syncCfg = null;
+      await idbSet('sync', null);
+      setSyncDot('');
+      renderPpl();
+      toast('已中斷同步(資料仍留在這支手機)');
+    });
+  } else {
+    view.querySelector('#sync-go').addEventListener('click', async () => {
+      const key = view.querySelector('#sync-key').value.trim();
+      if (!key) { toast('請貼上同步金鑰'); return; }
+      syncCfg = { token: key };
+      setSyncDot('busy');
+      try {
+        await ghGetRemote(); // 驗證金鑰有效
+        await idbSet('sync', syncCfg);
+        renderPpl();
+        toast('連線成功 ✓ 同步中…');
+        syncNow(false);
+      } catch {
+        syncCfg = null;
+        setSyncDot('');
+        toast('金鑰無效,請確認後再貼一次');
+      }
+    });
+  }
+
   const add = () => {
     const inp = view.querySelector('#new-pname');
     const name = inp.value.trim();
@@ -979,9 +1131,9 @@ function renderPpl() {
     const usedSlots = state.people.map(p => p.slot % 7);
     let slot = 0;
     while (usedSlots.includes(slot % 7) && slot < 7) slot++;
-    state.people.push({ id: uid(), name, slot: slot % 7 });
+    state.people.push({ id: uid(), name, slot: slot % 7, up: Date.now() });
     inp.value = '';
-    saveState(); toast(`歡迎 ${name} 💪`); renderPpl();
+    commit(); toast(`歡迎 ${name} 💪`); renderPpl();
   };
   view.querySelector('#add-ppl').addEventListener('click', add);
   view.querySelector('#new-pname').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
@@ -989,11 +1141,13 @@ function renderPpl() {
   view.querySelectorAll('#plist .mrow').forEach(row => {
     const id = row.dataset.id;
     armDelete(row.querySelector('.del'), () => {
+      tomb('people', [id]);
+      tomb('records', state.records.filter(r => r.personId === id).map(r => r.id));
       state.people = state.people.filter(p => p.id !== id);
       state.records = state.records.filter(r => r.personId !== id);
       if (selPerson === id) selPerson = null;
       hiddenPeople.delete(id);
-      saveState(); renderPpl();
+      commit(); renderPpl();
     });
   });
 }
@@ -1016,7 +1170,13 @@ function renderPpl() {
       navigator.serviceWorker.register('sw.js');
     }
   } catch {}
+  try { syncCfg = await idbGet('sync') || null; } catch {}
   render();
+  if (syncCfg) { setSyncDot('ok'); syncNow(false); }
+  // 回到前景時自動抓最新資料
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && syncCfg) syncNow(false);
+  });
 })();
 </script>
 </body>

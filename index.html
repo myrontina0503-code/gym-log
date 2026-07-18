@@ -187,6 +187,14 @@ main { flex:1; padding: 4px 14px calc(84px + env(safe-area-inset-bottom)); }
 .rrow .tm { font-size: 11px; color: var(--muted); flex:none; width: 38px; text-align:right; }
 .del { font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 8px; flex:none; }
 .del.armed { color: var(--on-accent); background: var(--danger); font-weight:700; }
+.rrow .edit { font-size: 12px; color: var(--accent); font-weight: 600; padding: 6px 6px; flex:none; }
+.ed-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.ed-grid label { font-size: 12px; color: var(--muted); display:flex; flex-direction:column; gap: 4px; }
+.ed-grid input {
+  font-size: 16px; padding: 9px 6px; text-align:center; font-weight: 700;
+  background: var(--sunken); border: 1px solid var(--hair); border-radius: 10px; width: 100%;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
 
 /* dashboard */
 .tiles { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -583,6 +591,8 @@ function schedulePush() {
 
 /* ── UI 狀態 ── */
 let tab = 'log';
+let recSearch = '';
+let recLimit = 12;
 let selPerson = null, selMachine = null;
 let dashMachine = null;
 let hiddenPeople = new Set();
@@ -720,13 +730,31 @@ function renderLog() {
     }
   }
 
-  const today0 = new Date(); today0.setHours(0,0,0,0);
-  const recent = state.records.slice().sort((a, b) => b.ts - a.ts).slice(0, 12);
-  html += `<div class="card" style="margin-top:14px"><h2>最近記錄</h2><div id="recent">` +
-    (recent.length === 0 ? '<div class="empty">還沒有任何記錄</div>' :
-      recent.map(r => {
+  html += `<div class="card" style="margin-top:14px"><h2>記錄查詢</h2>
+    <input type="text" id="rec-search" class="note-input" placeholder="🔍 搜尋:成員、器材、註記…" value="${esc(recSearch)}">
+    <div id="recent"></div>
+    <div id="rec-more-box"></div>
+  </div>`;
+
+  view.innerHTML = html;
+
+  function fillRecent() {
+    const today0 = new Date(); today0.setHours(0,0,0,0);
+    const q = recSearch.trim().toLowerCase();
+    const all = state.records.slice().sort((a, b) => b.ts - a.ts).filter(r => {
+      const p = person(r.personId), mc = machine(r.machineId);
+      if (!p || !mc) return false;
+      if (!q) return true;
+      return p.name.toLowerCase().includes(q) ||
+             mc.name.toLowerCase().includes(q) ||
+             (r.note && r.note.toLowerCase().includes(q));
+    });
+    const shown = all.slice(0, recLimit);
+    const box = view.querySelector('#recent');
+    box.innerHTML = shown.length === 0
+      ? `<div class="empty">${q ? '找不到符合的記錄' : '還沒有任何記錄'}</div>`
+      : shown.map(r => {
         const p = person(r.personId), mc = machine(r.machineId);
-        if (!p || !mc) return '';
         const valH = r.speed != null
           ? `${fmtKg(r.speed)}<small> km/h·斜${fmtKg(r.incline||0)}</small>`
           : `${fmtKg(r.kg)}<small> kg${r.reps?` ×${r.reps}`:''}${r.sets > 1 ? `×${r.sets}輪` : ''}</small>`;
@@ -736,12 +764,28 @@ function renderLog() {
           <span class="what">${esc(mc.name)}${r.note ? ` <span style="color:var(--muted)">· ${esc(r.note)}</span>` : ''}</span>
           <span class="kg">${valH}</span>
           <span class="tm">${r.ts >= today0.getTime() ? fmtT(r.ts) : fmtD(r.ts)}</span>
+          <button class="edit">改</button>
           <button class="del">刪除</button>
         </div>`;
-      }).join('')) +
-  `</div></div>`;
-
-  view.innerHTML = html;
+      }).join('');
+    const moreBox = view.querySelector('#rec-more-box');
+    moreBox.innerHTML = all.length > shown.length
+      ? `<button class="go alt" id="rec-more" style="width:100%;padding:10px;border-radius:10px;margin-top:6px">顯示更多(還有 ${all.length - shown.length} 筆)</button>`
+      : '';
+    const mb = view.querySelector('#rec-more');
+    if (mb) mb.addEventListener('click', () => { recLimit += 20; fillRecent(); });
+    box.querySelectorAll('.edit').forEach(btn =>
+      btn.addEventListener('click', () => showEditModal(btn.closest('.rrow').dataset.id)));
+    box.querySelectorAll('.del').forEach(btn => armDelete(btn, () => {
+      const id = btn.closest('.rrow').dataset.id;
+      state.records = state.records.filter(r => r.id !== id);
+      tomb('records', [id]);
+      commit(); renderLog();
+    }));
+  }
+  fillRecent();
+  const rs = view.querySelector('#rec-search');
+  rs.addEventListener('input', () => { recSearch = rs.value; recLimit = 12; fillRecent(); });
 
   view.querySelectorAll('#p-chips .chip').forEach(c =>
     c.addEventListener('click', () => { selPerson = c.dataset.id; renderLog(); }));
@@ -804,13 +848,48 @@ function renderLog() {
     });
   }
 
-  view.querySelectorAll('#recent .del').forEach(btn => {
-    armDelete(btn, () => {
-      const id = btn.closest('.rrow').dataset.id;
-      state.records = state.records.filter(r => r.id !== id);
-      tomb('records', [id]);
-      commit(); renderLog();
-    });
+}
+
+/* ── 修改單筆記錄 ── */
+function showEditModal(recId) {
+  const r = state.records.find(x => x.id === recId);
+  if (!r) return;
+  const p = person(r.personId), mc = machine(r.machineId);
+  const cardio = r.speed != null;
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="overlay" id="ed-ovl"><div class="modal">
+    <h2>✏️ 修改記錄 — ${esc(p ? p.name : '?')} · ${esc(mc ? mc.name : '?')}(${fmtDW(r.ts)})</h2>
+    <div class="ed-grid">` + (cardio ? `
+      <label>速度 km/h<input id="ed-a" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(r.speed)}"></label>
+      <label>斜度<input id="ed-b" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(r.incline || 0)}"></label>
+      <label>分鐘<input id="ed-c" type="number" inputmode="numeric" step="5" min="0" value="${r.mins || 0}"></label>` : `
+      <label>公斤<input id="ed-a" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(r.kg)}"></label>
+      <label>次數<input id="ed-b" type="number" inputmode="numeric" min="0" value="${r.reps || 0}"></label>
+      <label>輪數<input id="ed-c" type="number" inputmode="numeric" min="1" value="${r.sets || 1}"></label>`) + `
+    </div>
+    <input type="text" id="ed-note" class="note-input" maxlength="80" placeholder="註記(選填):訓練重點、座椅刻度…" value="${esc(r.note || '')}">
+    <div class="row">
+      <button class="go" id="ed-save">儲 存</button>
+      <button class="go alt" id="ed-close" style="flex:0 0 90px">取消</button>
+    </div>
+  </div></div>`;
+  const close = () => { root.innerHTML = ''; };
+  document.getElementById('ed-close').addEventListener('click', close);
+  document.getElementById('ed-ovl').addEventListener('click', e => { if (e.target.id === 'ed-ovl') close(); });
+  document.getElementById('ed-save').addEventListener('click', () => {
+    const a = parseFloat(document.getElementById('ed-a').value);
+    const b = parseFloat(document.getElementById('ed-b').value) || 0;
+    const c = parseInt(document.getElementById('ed-c').value) || 0;
+    const note = document.getElementById('ed-note').value.trim();
+    if (!(a > 0)) { toast(cardio ? '請輸入速度' : '請輸入公斤數'); return; }
+    if (cardio) { r.speed = a; r.incline = b; r.mins = c; }
+    else { r.kg = a; r.reps = Math.round(b); r.sets = Math.max(1, c || 1); }
+    r.note = note;
+    r.up = Date.now(); // 讓修改在同步合併時以較新版本為準
+    commit();
+    close();
+    render();
+    toast('已更新 ✓');
   });
 }
 
@@ -888,7 +967,8 @@ function renderDash() {
            <td style="text-align:right">${r.sets || 1}</td>`;
       return `<tr><td>${fmtDW(r.ts)}</td>
         <td><span class="dot" style="background:${pColor(p)}"></span>${esc(p.name)}</td>
-        ${cells}</tr>`;
+        ${cells}</tr>` +
+        (r.note ? `<tr><td colspan="5" style="color:var(--muted);font-size:12px;padding-top:2px">📝 ${esc(r.note)}</td></tr>` : '');
     }).join('') + `</tbody></table></div></div>`;
 
   view.innerHTML = html;

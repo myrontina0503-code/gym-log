@@ -519,8 +519,11 @@ async function runDiagnostics(token) {
       lines.push(`❌ ${label}\n    → 網路層級失敗:${(e && e.message) || e}`);
     }
   };
+  const masked = token ? `${token.slice(0, 8)}…${token.slice(-4)}(共 ${token.length} 字)` : '(空的)';
   lines.push(`測試時間:${new Date().toLocaleString('zh-TW')}`);
   lines.push(`UA:${navigator.userAgent}`);
+  lines.push(`測試用的金鑰:${masked}`);
+  lines.push(`連線狀態:${syncCfg ? '已連線(用 syncCfg.token)' : '未連線(用輸入框的值)'}`);
   lines.push('');
   await test('① 連得到 GitHub API 嗎(不需金鑰,額度較嚴格,失敗不代表同步會失敗)', 'https://api.github.com/', false);
   await test('② 這把金鑰本身有效嗎', 'https://api.github.com/user', true);

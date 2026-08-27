@@ -1504,6 +1504,8 @@ function renderPpl() {
 }
 
 /* ── 啟動 ── */
+window.__bootLog = [];
+function blog(...args) { window.__bootLog.push(args.map(a => { try { return JSON.stringify(a); } catch { return String(a); } }).join(' ')); }
 (async () => {
   const d = new Date();
   document.getElementById('topdate').textContent =
@@ -1522,48 +1524,48 @@ function renderPpl() {
     }
   } catch {}
   try { syncCfg = await idbGet('sync') || null; } catch {}
-  console.log('[boot] after idbGet(sync):', syncCfg);
+  blog('[boot] after idbGet(sync):', syncCfg);
   // 一鍵連線:網址帶 #key=金鑰 時自動連線(保留 hash,讓「加入主畫面」也帶著金鑰)
   {
     const m = location.hash.match(/key=([^&]+)/);
     const linkKey = m ? decodeURIComponent(m[1]) : null;
-    console.log('[boot] linkKey:', linkKey);
+    blog('[boot] linkKey:', linkKey);
     // 連結裡的金鑰跟目前存的不一樣時也要重連,這樣萬一本機存到壞掉的金鑰,重新點一次連結就能自我修復
     if (linkKey && (!syncCfg || syncCfg.token !== linkKey)) {
-      console.log('[boot] entering connect block');
+      blog('[boot] entering connect block');
       const prevCfg = syncCfg; // 記住原本的連線,失敗時要復原,避免誤點舊連結反而斷線
       syncCfg = { token: linkKey };
       let connErr = null;
       // 失敗先自動重試一次(間隔 1.5 秒),避免瞬間網路不穩就誤判金鑰失效
       for (let attempt = 0; attempt < 2; attempt++) {
-        console.log('[boot] attempt', attempt, 'start');
+        blog('[boot] attempt', attempt, 'start');
         try {
           const r = await fbGetRemote();
-          console.log('[boot] fbGetRemote ok', r);
+          blog('[boot] fbGetRemote ok', r);
           await idbSet('sync', syncCfg);
-          console.log('[boot] idbSet ok');
+          blog('[boot] idbSet ok');
           toast('同步已自動連線 ✓ ☁️');
           connErr = null;
           break;
         } catch (e) {
-          console.log('[boot] attempt', attempt, 'failed:', e && e.message, e);
+          blog('[boot] attempt', attempt, 'failed:', e && e.message, e);
           connErr = e;
           if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
         }
       }
-      console.log('[boot] loop done, connErr:', connErr, 'syncCfg:', syncCfg);
+      blog('[boot] loop done, connErr:', connErr, 'syncCfg:', syncCfg);
       if (connErr) {
         syncCfg = prevCfg;
         const msg = connErr.message || '';
         toast(`連結中的金鑰連不上(${msg || '網路被擋'},已重試仍失敗),請確認網址正確且有網路`);
       }
     } else {
-      console.log('[boot] skipped connect block (condition false)');
+      blog('[boot] skipped connect block (condition false)');
     }
   }
-  console.log('[boot] before render(), syncCfg:', syncCfg);
+  blog('[boot] before render(), syncCfg:', syncCfg);
   render();
-  console.log('[boot] after render()');
+  blog('[boot] after render()');
   // 在 LINE / FB 等 App 內建瀏覽器裡,儲存與同步都不可靠 → 提醒改用 Safari
   if (/Line\/|FBAV|FBAN|Instagram|MicroMessenger/i.test(navigator.userAgent)) {
     const b = document.createElement('div');
@@ -1571,8 +1573,8 @@ function renderPpl() {
     b.textContent = '⚠️ 你正在 LINE 內建瀏覽器中。請點右下角「⋯」→ 用 Safari(預設瀏覽器)開啟,同步和資料保存才會正常!';
     document.getElementById('app').prepend(b);
   }
-  console.log('[boot] final check, syncCfg:', syncCfg);
-  if (syncCfg) { setSyncDot('ok'); console.log('[boot] calling syncNow(false)'); syncNow(false); }
+  blog('[boot] final check, syncCfg:', syncCfg);
+  if (syncCfg) { setSyncDot('ok'); blog('[boot] calling syncNow(false)'); syncNow(false); }
   // 回到前景時自動抓最新資料
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && syncCfg) syncNow(false);

@@ -195,6 +195,7 @@ main { flex:1; padding: 4px 14px calc(84px + env(safe-area-inset-bottom)); }
   background: var(--sunken); border: 1px solid var(--hair); border-radius: 10px; width: 100%;
   color: var(--ink); font-variant-numeric: tabular-nums;
 }
+.ed-grid.c4 { grid-template-columns: repeat(4, 1fr); }
 
 /* dashboard */
 .tiles { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -288,6 +289,7 @@ table.data td .dot { display:inline-block; width:8px; height:8px; border-radius:
   <main id="view"></main>
   <nav class="tabbar" id="tabbar">
     <button data-tab="log"><span class="ic">✏️</span>記錄</button>
+    <button data-tab="person"><span class="ic">🙋</span>個人</button>
     <button data-tab="dash"><span class="ic">📈</span>圖表</button>
     <button data-tab="mach"><span class="ic">🏋️</span>器材</button>
     <button data-tab="ppl"><span class="ic">👥</span>成員</button>
@@ -593,6 +595,8 @@ function schedulePush() {
 let tab = 'log';
 let recSearch = '';
 let recLimit = 12;
+let personSearch = '';
+let personLimit = 12;
 let selPerson = null, selMachine = null;
 let dashMachine = null;
 let hiddenPeople = new Set();
@@ -605,6 +609,7 @@ function render() {
   document.querySelectorAll('#tabbar button').forEach(b =>
     b.classList.toggle('on', b.dataset.tab === tab));
   if (tab === 'log') renderLog();
+  else if (tab === 'person') renderPerson();
   else if (tab === 'dash') renderDash();
   else if (tab === 'mach') renderMach();
   else renderPpl();
@@ -681,12 +686,12 @@ function renderLog() {
           <button class="btn" id="ic-plus">＋</button>
         </div>
         <div class="stepper small">
-          <button class="btn" id="mn-minus">−5</button>
+          <button class="btn" id="mn-minus">−1</button>
           <div class="mid">
-            <input class="val" id="mn-val" type="number" inputmode="numeric" step="5" min="0" value="${mn0}">
+            <input class="val" id="mn-val" type="number" inputmode="numeric" step="1" min="0" value="${mn0}">
             <div class="unit">時間(分)</div>
           </div>
-          <button class="btn" id="mn-plus">+5</button>
+          <button class="btn" id="mn-plus">+1</button>
         </div>
         <input type="text" id="note-val" class="note-input" maxlength="80" placeholder="註記(選填):課表、心率、感覺…" value="${esc(cnote0)}">
         <button class="save-btn" id="save-rec">記 錄</button>
@@ -694,10 +699,11 @@ function renderLog() {
     } else {
       const kg0 = last && last.kg != null ? last.kg : 20, reps0 = last ? (last.reps || 10) : 10;
       const sets0 = last && last.sets ? last.sets : 1;
+      const mins0 = last && last.mins ? last.mins : 0;
       const note0 = last && last.note ? last.note : '';
       html += `<div class="card entry" style="margin-top:14px">
         <div class="pair">${esc(person(selPerson).name)} · ${esc(m.name)}</div>
-        <div class="last">${last && last.kg != null ? `上次:${fmtDW(last.ts)} ${fmtKg(last.kg)} kg × ${last.reps || '—'} 下${last.sets > 1 ? ` × ${last.sets} 輪` : ''}` : '第一次使用這台器材'}</div>
+        <div class="last">${last && last.kg != null ? `上次:${fmtDW(last.ts)} ${fmtKg(last.kg)} kg × ${last.reps || '—'} 下${last.sets > 1 ? ` × ${last.sets} 輪` : ''}${last.mins ? ` · ${last.mins} 分` : ''}` : '第一次使用這台器材'}</div>
         <div class="stepper">
           <button class="btn" id="kg-m25">−2.5</button>
           <button class="btn sm" id="kg-m1">−1</button>
@@ -723,6 +729,14 @@ function renderLog() {
             <div class="unit">輪數(組)</div>
           </div>
           <button class="btn" id="st-plus">＋</button>
+        </div>
+        <div class="stepper small">
+          <button class="btn" id="wm-minus">−1</button>
+          <div class="mid">
+            <input class="val" id="wm-val" type="number" inputmode="numeric" step="1" min="0" value="${mins0}">
+            <div class="unit">時間(分,選填)</div>
+          </div>
+          <button class="btn" id="wm-plus">+1</button>
         </div>
         <input type="text" id="note-val" class="note-input" maxlength="80" placeholder="註記(選填):訓練重點、座椅刻度…" value="${esc(note0)}">
         <button class="save-btn" id="save-rec">記 錄</button>
@@ -757,7 +771,7 @@ function renderLog() {
         const p = person(r.personId), mc = machine(r.machineId);
         const valH = r.speed != null
           ? `${fmtKg(r.speed)}<small> km/h·斜${fmtKg(r.incline||0)}</small>`
-          : `${fmtKg(r.kg)}<small> kg${r.reps?` ×${r.reps}`:''}${r.sets > 1 ? `×${r.sets}輪` : ''}</small>`;
+          : `${fmtKg(r.kg)}<small> kg${r.reps?` ×${r.reps}`:''}${r.sets > 1 ? `×${r.sets}輪` : ''}${r.mins ? `·${r.mins}分` : ''}</small>`;
         return `<div class="rrow" data-id="${r.id}">
           <span class="dot" style="background:${pColor(p)}"></span>
           <span class="who">${esc(p.name)}</span>
@@ -804,7 +818,7 @@ function renderLog() {
     v = Math.max(0, v + d);
     inp.value = dec ? fmtKg(v) : Math.round(v);
   };
-  const kgV = view.querySelector('#kg-val'), rpV = view.querySelector('#rp-val'), stV = view.querySelector('#st-val');
+  const kgV = view.querySelector('#kg-val'), rpV = view.querySelector('#rp-val'), stV = view.querySelector('#st-val'), wmV = view.querySelector('#wm-val');
   if (kgV) {
     view.querySelector('#kg-m25').addEventListener('click', () => bump(kgV, -2.5, true));
     view.querySelector('#kg-m1').addEventListener('click', () => bump(kgV, -1, true));
@@ -814,14 +828,17 @@ function renderLog() {
     view.querySelector('#rp-plus').addEventListener('click', () => bump(rpV, 1, false));
     view.querySelector('#st-minus').addEventListener('click', () => bump(stV, -1, false));
     view.querySelector('#st-plus').addEventListener('click', () => bump(stV, 1, false));
+    view.querySelector('#wm-minus').addEventListener('click', () => bump(wmV, -1, false));
+    view.querySelector('#wm-plus').addEventListener('click', () => bump(wmV, 1, false));
     view.querySelector('#save-rec').addEventListener('click', () => {
       const kg = parseFloat(kgV.value), reps = parseInt(rpV.value) || 0;
       const sets = Math.max(1, parseInt(stV.value) || 1);
+      const mins = parseInt(wmV.value) || 0;
       const note = view.querySelector('#note-val').value.trim();
       if (!(kg > 0)) { toast('請輸入公斤數'); return; }
-      state.records.push({ id: uid(), personId: selPerson, machineId: selMachine, kg, reps, sets, note, ts: Date.now() });
+      state.records.push({ id: uid(), personId: selPerson, machineId: selMachine, kg, reps, sets, mins, note, ts: Date.now() });
       commit();
-      toast(`已記錄 ✓ ${person(selPerson).name} · ${machine(selMachine).name} ${fmtKg(kg)}kg${sets > 1 ? ` ×${sets}輪` : ''}`);
+      toast(`已記錄 ✓ ${person(selPerson).name} · ${machine(selMachine).name} ${fmtKg(kg)}kg${sets > 1 ? ` ×${sets}輪` : ''}${mins > 0 ? ` ·${mins}分` : ''}`);
       backupNudge();
       renderLog();
     });
@@ -832,8 +849,8 @@ function renderLog() {
     view.querySelector('#sp-plus').addEventListener('click', () => bump(spV, 0.5, true));
     view.querySelector('#ic-minus').addEventListener('click', () => bump(icV, -0.5, true));
     view.querySelector('#ic-plus').addEventListener('click', () => bump(icV, 0.5, true));
-    view.querySelector('#mn-minus').addEventListener('click', () => bump(mnV, -5, false));
-    view.querySelector('#mn-plus').addEventListener('click', () => bump(mnV, 5, false));
+    view.querySelector('#mn-minus').addEventListener('click', () => bump(mnV, -1, false));
+    view.querySelector('#mn-plus').addEventListener('click', () => bump(mnV, 1, false));
     view.querySelector('#save-rec').addEventListener('click', () => {
       const speed = parseFloat(spV.value);
       const incline = parseFloat(icV.value) || 0;
@@ -859,13 +876,14 @@ function showEditModal(recId) {
   const root = document.getElementById('modal-root');
   root.innerHTML = `<div class="overlay" id="ed-ovl"><div class="modal">
     <h2>✏️ 修改記錄 — ${esc(p ? p.name : '?')} · ${esc(mc ? mc.name : '?')}(${fmtDW(r.ts)})</h2>
-    <div class="ed-grid">` + (cardio ? `
+    <div class="ed-grid${cardio ? '' : ' c4'}">` + (cardio ? `
       <label>速度 km/h<input id="ed-a" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(r.speed)}"></label>
       <label>斜度<input id="ed-b" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(r.incline || 0)}"></label>
-      <label>分鐘<input id="ed-c" type="number" inputmode="numeric" step="5" min="0" value="${r.mins || 0}"></label>` : `
+      <label>分鐘<input id="ed-c" type="number" inputmode="numeric" step="1" min="0" value="${r.mins || 0}"></label>` : `
       <label>公斤<input id="ed-a" type="number" inputmode="decimal" step="0.5" min="0" value="${fmtKg(r.kg)}"></label>
       <label>次數<input id="ed-b" type="number" inputmode="numeric" min="0" value="${r.reps || 0}"></label>
-      <label>輪數<input id="ed-c" type="number" inputmode="numeric" min="1" value="${r.sets || 1}"></label>`) + `
+      <label>輪數<input id="ed-c" type="number" inputmode="numeric" min="1" value="${r.sets || 1}"></label>
+      <label>分鐘<input id="ed-d" type="number" inputmode="numeric" step="1" min="0" value="${r.mins || 0}"></label>`) + `
     </div>
     <input type="text" id="ed-note" class="note-input" maxlength="80" placeholder="註記(選填):訓練重點、座椅刻度…" value="${esc(r.note || '')}">
     <div class="row">
@@ -880,10 +898,11 @@ function showEditModal(recId) {
     const a = parseFloat(document.getElementById('ed-a').value);
     const b = parseFloat(document.getElementById('ed-b').value) || 0;
     const c = parseInt(document.getElementById('ed-c').value) || 0;
+    const d = cardio ? 0 : (parseInt(document.getElementById('ed-d').value) || 0);
     const note = document.getElementById('ed-note').value.trim();
     if (!(a > 0)) { toast(cardio ? '請輸入速度' : '請輸入公斤數'); return; }
     if (cardio) { r.speed = a; r.incline = b; r.mins = c; }
-    else { r.kg = a; r.reps = Math.round(b); r.sets = Math.max(1, c || 1); }
+    else { r.kg = a; r.reps = Math.round(b); r.sets = Math.max(1, c || 1); r.mins = d; }
     r.note = note;
     r.up = Date.now(); // 讓修改在同步合併時以較新版本為準
     commit();
@@ -891,6 +910,112 @@ function showEditModal(recId) {
     render();
     toast('已更新 ✓');
   });
+}
+
+/* ══ 個人記錄頁 ══ */
+function renderPerson() {
+  if (state.people.length === 0) {
+    view.innerHTML = `<div class="card"><div class="empty">還沒有成員,先到 <button class="jump" data-j="ppl">「成員」</button> 新增使用的人</div></div>`;
+    view.querySelectorAll('.jump').forEach(b => b.addEventListener('click', () => jumpTo(b.dataset.j)));
+    return;
+  }
+  if (!selPerson || !person(selPerson)) selPerson = state.people[0].id;
+  const pName = esc(person(selPerson).name);
+
+  let html = `<div class="section-label">查看誰的記錄?</div>
+  <div class="chips" id="pp-chips">` +
+    state.people.map(p => `<button class="chip ${p.id===selPerson?'on':''}" data-id="${p.id}">
+      <span class="dot" style="background:${pColor(p)}"></span>${esc(p.name)}</button>`).join('') +
+  `</div>`;
+
+  const myRecs = state.records.filter(r => r.personId === selPerson).sort((a, b) => b.ts - a.ts);
+
+  if (myRecs.length === 0) {
+    html += `<div class="card" style="margin-top:14px"><div class="empty">${pName} 還沒有任何記錄</div></div>`;
+    view.innerHTML = html;
+    view.querySelectorAll('#pp-chips .chip').forEach(c =>
+      c.addEventListener('click', () => { selPerson = c.dataset.id; personSearch = ''; personLimit = 12; renderPerson(); }));
+    return;
+  }
+
+  // 各器材個人最新/最佳戰績(myRecs 已依時間新→舊排序,故每個 array 的第一筆就是最新一次)
+  const byM = new Map();
+  for (const r of myRecs) {
+    if (!byM.has(r.machineId)) byM.set(r.machineId, []);
+    byM.get(r.machineId).push(r);
+  }
+  const mIds = [...byM.keys()].filter(id => machine(id));
+  html += `<div class="tiles" style="margin-top:12px">` + mIds.map(id => {
+    const mc = machine(id), arr = byM.get(id);
+    const cardio = mc.mode === 'cardio';
+    const val = r => cardio ? r.speed : r.kg;
+    const unit = cardio ? 'km/h' : 'kg';
+    const latest = val(arr[0]), best = Math.max(...arr.map(val));
+    return `<div class="tile">
+      <div class="who">${mc.photo ? `<img src="${mc.photo}" style="width:18px;height:18px;border-radius:5px;object-fit:cover">` : ''}${esc(mc.name)}</div>
+      <div class="big">${fmtKg(latest)}<small> ${unit} 最新</small></div>
+      <div class="sub">${cardio ? '最快' : '最高'} ${fmtKg(best)} ${unit} · 共 ${arr.length} 次</div>
+    </div>`;
+  }).join('') + `</div>`;
+
+  html += `<div class="card"><h2>${pName} 的記錄(共 ${myRecs.length} 筆)</h2>
+    <input type="text" id="pp-search" class="note-input" placeholder="🔍 搜尋:器材、註記…" value="${esc(personSearch)}">
+    <div id="pp-list"></div>
+    <div id="pp-more-box"></div>
+  </div>`;
+
+  view.innerHTML = html;
+
+  function fillList() {
+    const today0 = new Date(); today0.setHours(0,0,0,0);
+    const q = personSearch.trim().toLowerCase();
+    const filtered = myRecs.filter(r => {
+      const mc = machine(r.machineId);
+      if (!mc) return false;
+      if (!q) return true;
+      return mc.name.toLowerCase().includes(q) || (r.note && r.note.toLowerCase().includes(q));
+    });
+    const shown = filtered.slice(0, personLimit);
+    const box = view.querySelector('#pp-list');
+    box.innerHTML = shown.length === 0
+      ? `<div class="empty">${q ? '找不到符合的記錄' : '還沒有任何記錄'}</div>`
+      : shown.map(r => {
+        const mc = machine(r.machineId);
+        if (!mc) return '';
+        const valH = r.speed != null
+          ? `${fmtKg(r.speed)}<small> km/h·斜${fmtKg(r.incline||0)}</small>`
+          : `${fmtKg(r.kg)}<small> kg${r.reps?` ×${r.reps}`:''}${r.sets > 1 ? `×${r.sets}輪` : ''}${r.mins ? `·${r.mins}分` : ''}</small>`;
+        return `<div class="rrow" data-id="${r.id}">
+          <span class="dot" style="background:${pColor(person(selPerson))}"></span>
+          <span class="who">${esc(mc.name)}</span>
+          <span class="what">${r.note ? esc(r.note) : ''}</span>
+          <span class="kg">${valH}</span>
+          <span class="tm">${r.ts >= today0.getTime() ? fmtT(r.ts) : fmtD(r.ts)}</span>
+          <button class="edit">改</button>
+          <button class="del">刪除</button>
+        </div>`;
+      }).join('');
+    const moreBox = view.querySelector('#pp-more-box');
+    moreBox.innerHTML = filtered.length > shown.length
+      ? `<button class="go alt" id="pp-more" style="width:100%;padding:10px;border-radius:10px;margin-top:6px">顯示更多(還有 ${filtered.length - shown.length} 筆)</button>`
+      : '';
+    const mb = view.querySelector('#pp-more');
+    if (mb) mb.addEventListener('click', () => { personLimit += 20; fillList(); });
+    box.querySelectorAll('.edit').forEach(btn =>
+      btn.addEventListener('click', () => showEditModal(btn.closest('.rrow').dataset.id)));
+    box.querySelectorAll('.del').forEach(btn => armDelete(btn, () => {
+      const id = btn.closest('.rrow').dataset.id;
+      state.records = state.records.filter(x => x.id !== id);
+      tomb('records', [id]);
+      commit(); renderPerson();
+    }));
+  }
+  fillList();
+  const ps = view.querySelector('#pp-search');
+  ps.addEventListener('input', () => { personSearch = ps.value; personLimit = 12; fillList(); });
+
+  view.querySelectorAll('#pp-chips .chip').forEach(c =>
+    c.addEventListener('click', () => { selPerson = c.dataset.id; personSearch = ''; personLimit = 12; renderPerson(); }));
 }
 
 /* ══ 圖表頁 ══ */
@@ -953,7 +1078,7 @@ function renderDash() {
     <thead><tr><th>日期</th><th>成員</th>` +
     (cardio
       ? `<th style="text-align:right">速度</th><th style="text-align:right">斜度</th><th style="text-align:right">分鐘</th>`
-      : `<th style="text-align:right">公斤</th><th style="text-align:right">次數</th><th style="text-align:right">輪</th>`) +
+      : `<th style="text-align:right">公斤</th><th style="text-align:right">次數</th><th style="text-align:right">輪</th><th style="text-align:right">分鐘</th>`) +
     `</tr></thead>
     <tbody>` + tableRecs.map(r => {
       const p = person(r.personId);
@@ -964,11 +1089,12 @@ function renderDash() {
            <td style="text-align:right">${r.mins || '—'}</td>`
         : `<td style="text-align:right">${fmtKg(r.kg)}</td>
            <td style="text-align:right">${r.reps || '—'}</td>
-           <td style="text-align:right">${r.sets || 1}</td>`;
+           <td style="text-align:right">${r.sets || 1}</td>
+           <td style="text-align:right">${r.mins || '—'}</td>`;
       return `<tr><td>${fmtDW(r.ts)}</td>
         <td><span class="dot" style="background:${pColor(p)}"></span>${esc(p.name)}</td>
         ${cells}</tr>` +
-        (r.note ? `<tr><td colspan="5" style="color:var(--muted);font-size:12px;padding-top:2px">📝 ${esc(r.note)}</td></tr>` : '');
+        (r.note ? `<tr><td colspan="${cardio ? 5 : 6}" style="color:var(--muted);font-size:12px;padding-top:2px">📝 ${esc(r.note)}</td></tr>` : '');
     }).join('') + `</tbody></table></div></div>`;
 
   view.innerHTML = html;
@@ -1076,7 +1202,7 @@ function drawChart(byP, pids, cardio) {
     if (!best) { tip.style.opacity = 0; return; }
     tip.innerHTML = cardio
       ? `${esc(best.p.name)} ${fmtDW(best.r.ts)}<br><strong>${fmtKg(best.r.speed)} km/h</strong> · 斜度 ${fmtKg(best.r.incline||0)}${best.r.mins ? ` · ${best.r.mins} 分` : ''}${best.r.note ? `<br>📝 ${esc(best.r.note)}` : ''}`
-      : `${esc(best.p.name)} ${fmtDW(best.r.ts)}<br><strong>${fmtKg(best.r.kg)} kg</strong>${best.r.reps ? ` × ${best.r.reps} 下` : ''}${best.r.sets > 1 ? ` × ${best.r.sets} 輪` : ''}${best.r.note ? `<br>📝 ${esc(best.r.note)}` : ''}`;
+      : `${esc(best.p.name)} ${fmtDW(best.r.ts)}<br><strong>${fmtKg(best.r.kg)} kg</strong>${best.r.reps ? ` × ${best.r.reps} 下` : ''}${best.r.sets > 1 ? ` × ${best.r.sets} 輪` : ''}${best.r.mins ? ` · ${best.r.mins} 分` : ''}${best.r.note ? `<br>📝 ${esc(best.r.note)}` : ''}`;
     tip.style.left = (best.px / W * box.width) + 'px';
     tip.style.top = (best.py / H * box.height) + 'px';
     tip.style.opacity = 1;

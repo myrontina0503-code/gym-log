@@ -555,33 +555,50 @@ function mergeStates(a, b) {
     meta: { lastBackup: Math.max(((a.meta || {}).lastBackup) || 0, ((b.meta || {}).lastBackup) || 0) }
   };
 }
+async function syncOnce() {
+  const before = JSON.stringify(state);
+  const { sha, data } = await ghGetRemote();
+  if (data) state = mergeStates(state, data);
+  saveState();
+  const after = JSON.stringify(state);
+  if (!data || after !== JSON.stringify(data)) {
+    try { await ghPut(sha); }
+    catch (e) {
+      if (e.message !== 'conflict') throw e;
+      // 另一支手機剛好也在上傳:重抓、再合併、再上傳一次
+      const r2 = await ghGetRemote();
+      if (r2.data) state = mergeStates(state, r2.data);
+      saveState();
+      await ghPut(r2.sha);
+    }
+  }
+  return after !== before;
+}
 async function syncNow(manual) {
   if (!syncCfg || syncBusy) return;
   syncBusy = true;
   setSyncDot('busy');
-  try {
-    const before = JSON.stringify(state);
-    const { sha, data } = await ghGetRemote();
-    if (data) state = mergeStates(state, data);
-    saveState();
-    const after = JSON.stringify(state);
-    if (!data || after !== JSON.stringify(data)) {
-      try { await ghPut(sha); }
-      catch (e) {
-        if (e.message !== 'conflict') throw e;
-        // 另一支手機剛好也在上傳:重抓、再合併、再上傳一次
-        const r2 = await ghGetRemote();
-        if (r2.data) state = mergeStates(state, r2.data);
-        saveState();
-        await ghPut(r2.sha);
-      }
+  let lastErr = null;
+  // 失敗先自動重試一次(間隔 1.5 秒),避免瞬間網路不穩就誤判成「金鑰無效」
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const changed = await syncOnce();
+      setSyncDot('ok');
+      if (changed) render();
+      if (manual) toast('已同步 ✓ ☁️');
+      syncBusy = false;
+      return;
+    } catch (e) {
+      lastErr = e;
+      if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
     }
-    setSyncDot('ok');
-    if (after !== before) render();
-    if (manual) toast('已同步 ✓ ☁️');
-  } catch (e) {
-    setSyncDot('err');
-    if (manual) toast(e.message.startsWith('auth') ? '同步金鑰無效或權限不足' : '同步失敗,請檢查網路');
+  }
+  setSyncDot('err');
+  if (manual) {
+    const msg = lastErr && lastErr.message || '';
+    if (msg.startsWith('auth')) toast(`同步金鑰無效或權限不足(HTTP ${msg.slice(5)},已重試仍失敗)`);
+    else if (msg.startsWith('net')) toast(`同步失敗(HTTP ${msg.slice(4)}),請檢查網路`);
+    else toast(`同步失敗:${msg || '網路被擋'},請檢查網路`);
   }
   syncBusy = false;
 }

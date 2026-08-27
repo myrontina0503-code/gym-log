@@ -238,8 +238,8 @@ table.data td .dot { display:inline-block; width:8px; height:8px; border-radius:
 .mrow .thumb-empty { width:54px; height:54px; border-radius:10px; flex:none; background:var(--sunken);
   display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--muted); font-size:20px; }
 .mrow .info { flex:1; min-width:0; }
-.mrow .nm { font-size: 15px; font-weight: 700; }
-.mrow .ct { font-size: 12px; color: var(--muted); margin-top:2px; }
+.mrow .nm { font-size: 15px; font-weight: 700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mrow .ct { font-size: 12px; color: var(--muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mrow .act { font-size: 12px; color: var(--accent); font-weight:600; padding: 6px 8px; flex:none; }
 .photo-pick {
   width: 74px; height: 74px; border-radius: 12px; flex:none;
@@ -1239,6 +1239,7 @@ function renderMach() {
           ${mc.photo ? `<img class="thumb" src="${mc.photo}" alt="">`
                      : `<div class="thumb-empty">${esc(mc.name.slice(0,1))}</div>`}
           <div class="info"><div class="nm">${esc(mc.name)}</div><div class="ct">${mc.mode==='cardio'?'🏃 有氧':'🏋️ 重量'} · ${n} 筆記錄</div></div>
+          <button class="act rename">改名</button>
           <button class="act mode">改類型</button>
           <button class="act photo">📷</button>
           <button class="del">刪除</button>
@@ -1262,6 +1263,7 @@ function renderMach() {
 
   view.querySelectorAll('#mlist .mrow').forEach(row => {
     const id = row.dataset.id;
+    row.querySelector('.rename').addEventListener('click', () => showRenameModal(id));
     row.querySelector('.mode').addEventListener('click', () => {
       const mc = machine(id);
       mc.mode = mc.mode === 'cardio' ? 'weight' : 'cardio';
@@ -1283,6 +1285,37 @@ function renderMach() {
       if (dashMachine === id) dashMachine = null;
       commit(); renderMach();
     });
+  });
+}
+
+/* ── 修改器材名稱 ── */
+function showRenameModal(machineId) {
+  const mc = machine(machineId);
+  if (!mc) return;
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="overlay" id="rn-ovl"><div class="modal">
+    <h2>✏️ 修改器材名稱</h2>
+    <input type="text" id="rn-input" class="note-input" maxlength="40" value="${esc(mc.name)}">
+    <div class="row" style="margin-top:10px">
+      <button class="go" id="rn-save">儲 存</button>
+      <button class="go alt" id="rn-close" style="flex:0 0 90px">取消</button>
+    </div>
+  </div></div>`;
+  const close = () => { root.innerHTML = ''; };
+  document.getElementById('rn-close').addEventListener('click', close);
+  document.getElementById('rn-ovl').addEventListener('click', e => { if (e.target.id === 'rn-ovl') close(); });
+  const input = document.getElementById('rn-input');
+  input.focus(); input.select();
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('rn-save').click(); });
+  document.getElementById('rn-save').addEventListener('click', () => {
+    const name = input.value.trim();
+    if (!name) { toast('請輸入器材名稱'); return; }
+    mc.name = name;
+    mc.up = Date.now();
+    commit();
+    close();
+    renderMach();
+    toast('已更新名稱 ✓');
   });
 }
 

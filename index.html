@@ -492,46 +492,34 @@ function showBackupModal(mode) {
   });
 }
 
-/* ── 同步進階診斷:逐層測試,找出到底卡在哪一關 ── */
-async function runDiagnostics(token) {
+/* ── 同步進階診斷 ── */
+async function runDiagnostics(syncUrl) {
   const lines = [];
-  const test = async (label, url, withAuth) => {
-    try {
-      const opts = { cache: 'no-store' };
-      if (withAuth) opts.headers = { Authorization: `Bearer ${token}` };
-      const r = await fetch(url, opts);
-      let extra = '';
-      if (!r.ok) {
-        try {
-          const j = await r.json();
-          if (j && j.message) extra = `\n    說明:${j.message}`;
-        } catch {}
-        const remain = r.headers.get('x-ratelimit-remaining');
-        const limit = r.headers.get('x-ratelimit-limit');
-        const reset = r.headers.get('x-ratelimit-reset');
-        if (remain !== null) {
-          const resetTime = reset ? new Date(parseInt(reset, 10) * 1000).toLocaleTimeString('zh-TW') : '?';
-          extra += `\n    額度:剩 ${remain}/${limit},重置時間 ${resetTime}`;
-        }
-      }
-      lines.push(`${r.ok ? '✅' : '❌'} ${label}\n    → HTTP ${r.status}${extra}`);
-    } catch (e) {
-      lines.push(`❌ ${label}\n    → 網路層級失敗:${(e && e.message) || e}`);
-    }
-  };
-  const masked = token ? `${token.slice(0, 8)}…${token.slice(-4)}(共 ${token.length} 字)` : '(空的)';
   lines.push(`測試時間:${new Date().toLocaleString('zh-TW')}`);
   lines.push(`UA:${navigator.userAgent}`);
-  lines.push(`測試用的金鑰:${masked}`);
+  lines.push(`測試用的網址:${syncUrl}`);
   lines.push(`連線狀態:${syncCfg ? '已連線(用 syncCfg.token)' : '未連線(用輸入框的值)'}`);
   lines.push('');
-  await test('① 連得到 GitHub API 嗎(不需金鑰,額度較嚴格,失敗不代表同步會失敗)', 'https://api.github.com/', false);
-  await test('② 這把金鑰本身有效嗎', 'https://api.github.com/user', true);
-  await test('③ 這把金鑰看得到 gym-data 這個 repo 嗎', 'https://api.github.com/repos/myrontina0503-code/gym-data', true);
-  await test('④ 能列出 repo 內容嗎(App 實際使用的呼叫)', 'https://api.github.com/repos/myrontina0503-code/gym-data/contents/', true);
+  try {
+    const url = syncUrl.replace(/\/+$/, '') + '/state.json';
+    const r = await fetch(url, { headers: { 'X-Firebase-ETag': 'true' }, cache: 'no-store' });
+    const text = await r.text();
+    if (r.ok) {
+      let summary = text;
+      try {
+        const j = JSON.parse(text);
+        summary = j ? `people:${(j.people||[]).length} machines:${(j.machines||[]).length} records:${(j.records||[]).length}` : '(空的資料庫)';
+      } catch {}
+      lines.push(`✅ 連得到同步資料庫嗎(App 實際使用的呼叫)\n    → HTTP ${r.status}\n    內容:${summary}`);
+    } else {
+      lines.push(`❌ 連得到同步資料庫嗎(App 實際使用的呼叫)\n    → HTTP ${r.status}\n    內容:${text.slice(0, 200)}`);
+    }
+  } catch (e) {
+    lines.push(`❌ 連得到同步資料庫嗎(App 實際使用的呼叫)\n    → 網路層級失敗:${(e && e.message) || e}`);
+  }
   return lines.join('\n\n');
 }
-async function showDiagModal(token) {
+async function showDiagModal(syncUrl) {
   const root = document.getElementById('modal-root');
   root.innerHTML = `<div class="overlay" id="dg-ovl"><div class="modal">
     <h2>🔧 進階診斷</h2>
@@ -545,8 +533,8 @@ async function showDiagModal(token) {
   document.getElementById('dg-close').addEventListener('click', close);
   document.getElementById('dg-ovl').addEventListener('click', e => { if (e.target.id === 'dg-ovl') close(); });
   const body = document.getElementById('dg-body');
-  if (!token) { body.textContent = '沒有金鑰可以測試 — 請先在上面貼上同步金鑰,或先完成連線。'; return; }
-  const text = await runDiagnostics(token);
+  if (!syncUrl) { body.textContent = '沒有金鑰可以測試 — 請先在上面貼上同步金鑰,或先完成連線。'; return; }
+  const text = await runDiagnostics(syncUrl);
   body.textContent = text;
   document.getElementById('dg-copy').addEventListener('click', async () => {
     let ok = false;
@@ -556,8 +544,7 @@ async function showDiagModal(token) {
   });
 }
 
-/* ── 家人同步(以 GitHub 私人儲存庫當雲端資料庫)── */
-const SYNC_REPO = 'myrontina0503-code/gym-data';
+/* ── 家人同步(以 Firebase Realtime Database 當雲端資料庫)── */
 let syncCfg = null;   // {token} 每支手機各自輸入一次
 let syncBusy = false;
 let pushTimer = null;
@@ -566,37 +553,26 @@ function setSyncDot(s) {
   const el = document.getElementById('sync-dot');
   if (el) el.textContent = s === 'ok' ? '☁️' : s === 'busy' ? '⏳' : s === 'err' ? '⚠️' : '';
 }
-function b64utf8(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
+function dbUrl(path) {
+  return syncCfg.token.replace(/\/+$/, '') + path;
 }
-async function ghGetRemote() {
-  const h = { Authorization: `Bearer ${syncCfg.token}` };
-  const list = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/`, {
-    headers: { ...h, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
-  if (list.status === 401 || list.status === 403 || list.status === 404) throw new Error('auth:' + list.status);
-  if (!list.ok) throw new Error('net:' + list.status);
-  const arr = await list.json();
-  const ent = Array.isArray(arr) ? arr.find(f => f.name === 'state.json') : null;
-  if (!ent) return { sha: null, data: null };
-  const raw = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/state.json`, {
-    headers: { ...h, Accept: 'application/vnd.github.raw' }, cache: 'no-store' });
-  if (!raw.ok) throw new Error('net:' + raw.status);
-  return { sha: ent.sha, data: JSON.parse(await raw.text()) };
+async function fbGetRemote() {
+  const res = await fetch(dbUrl('/state.json'), {
+    headers: { 'X-Firebase-ETag': 'true' }, cache: 'no-store' });
+  if (!res.ok) throw new Error('net:' + res.status);
+  const etag = res.headers.get('etag');
+  const text = await res.text();
+  const data = (!text || text === 'null') ? null : JSON.parse(text);
+  return { etag, data };
 }
-async function ghPut(sha) {
-  const body = { message: 'sync', content: b64utf8(JSON.stringify(state)) };
-  if (sha) body.sha = sha;
-  const r = await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/state.json`, {
+async function fbPut(etag) {
+  const res = await fetch(dbUrl('/state.json'), {
     method: 'PUT',
-    headers: { Authorization: `Bearer ${syncCfg.token}`, Accept: 'application/vnd.github+json' },
-    body: JSON.stringify(body)
+    headers: Object.assign({ 'Content-Type': 'application/json' }, etag ? { 'if-match': etag } : {}),
+    body: JSON.stringify(state)
   });
-  if (r.status === 409 || r.status === 422) throw new Error('conflict');
-  if (!r.ok) throw new Error('net');
+  if (res.status === 412) throw new Error('conflict');
+  if (!res.ok) throw new Error('net:' + res.status);
 }
 /* 合併兩份資料:同 id 取較新,刪除靠墓碑,記錄依時間排序 */
 function mergeStates(a, b) {
@@ -621,19 +597,19 @@ function mergeStates(a, b) {
 }
 async function syncOnce() {
   const before = JSON.stringify(state);
-  const { sha, data } = await ghGetRemote();
+  const { etag, data } = await fbGetRemote();
   if (data) state = mergeStates(state, data);
   saveState();
   const after = JSON.stringify(state);
   if (!data || after !== JSON.stringify(data)) {
-    try { await ghPut(sha); }
+    try { await fbPut(etag); }
     catch (e) {
       if (e.message !== 'conflict') throw e;
       // 另一支手機剛好也在上傳:重抓、再合併、再上傳一次
-      const r2 = await ghGetRemote();
+      const r2 = await fbGetRemote();
       if (r2.data) state = mergeStates(state, r2.data);
       saveState();
-      await ghPut(r2.sha);
+      await fbPut(r2.etag);
     }
   }
   return after !== before;
@@ -660,8 +636,7 @@ async function syncNow(manual) {
   setSyncDot('err');
   if (manual) {
     const msg = lastErr && lastErr.message || '';
-    if (msg.startsWith('auth')) toast(`同步金鑰無效或權限不足(HTTP ${msg.slice(5)},已重試仍失敗)`);
-    else if (msg.startsWith('net')) toast(`同步失敗(HTTP ${msg.slice(4)}),請檢查網路`);
+    if (msg.startsWith('net')) toast(`同步失敗(HTTP ${msg.slice(4)}),請檢查網路或同步金鑰是否正確`);
     else toast(`同步失敗:${msg || '網路被擋'},請檢查網路`);
   }
   syncBusy = false;
@@ -1463,8 +1438,9 @@ function renderPpl() {
 
   if (syncCfg) {
     view.querySelector('#sync-share').addEventListener('click', async () => {
-      const link = location.origin + location.pathname + '#key=' + syncCfg.token;
-      try { location.hash = 'key=' + syncCfg.token; } catch {}
+      const encoded = encodeURIComponent(syncCfg.token);
+      const link = location.origin + location.pathname + '#key=' + encoded;
+      try { location.hash = 'key=' + encoded; } catch {}
       let ok = false;
       try { await navigator.clipboard.writeText(link); ok = true; } catch {}
       toast(ok ? '連結已複製 ✓ 網址列也已帶上金鑰,現在可直接「加入主畫面」'
@@ -1486,7 +1462,7 @@ function renderPpl() {
       syncCfg = { token: key };
       setSyncDot('busy');
       try {
-        await ghGetRemote(); // 驗證金鑰有效
+        await fbGetRemote(); // 驗證金鑰有效
         await idbSet('sync', syncCfg);
         renderPpl();
         toast('連線成功 ✓ 同步中…');
@@ -1494,9 +1470,7 @@ function renderPpl() {
       } catch (e) {
         syncCfg = null;
         setSyncDot('');
-        toast(e.message.startsWith('auth')
-          ? `金鑰不對(貼進來 ${key.length} 字,正確是 40 字,HTTP ${e.message.slice(5)})`
-          : '連不上網路,請確認收訊後再按一次連線');
+        toast(`連線失敗(${e.message || '網路被擋'}),請確認金鑰網址正確且收訊後再按一次連線`);
       }
     });
   }
@@ -1550,16 +1524,17 @@ function renderPpl() {
   try { syncCfg = await idbGet('sync') || null; } catch {}
   // 一鍵連線:網址帶 #key=金鑰 時自動連線(保留 hash,讓「加入主畫面」也帶著金鑰)
   {
-    const m = location.hash.match(/key=([A-Za-z0-9_]+)/);
+    const m = location.hash.match(/key=([^&]+)/);
+    const linkKey = m ? decodeURIComponent(m[1]) : null;
     // 連結裡的金鑰跟目前存的不一樣時也要重連,這樣萬一本機存到壞掉的金鑰,重新點一次連結就能自我修復
-    if (m && (!syncCfg || syncCfg.token !== m[1])) {
+    if (linkKey && (!syncCfg || syncCfg.token !== linkKey)) {
       const prevCfg = syncCfg; // 記住原本的連線,失敗時要復原,避免誤點舊連結反而斷線
-      syncCfg = { token: m[1] };
+      syncCfg = { token: linkKey };
       let connErr = null;
       // 失敗先自動重試一次(間隔 1.5 秒),避免瞬間網路不穩就誤判金鑰失效
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          await ghGetRemote();
+          await fbGetRemote();
           await idbSet('sync', syncCfg);
           toast('同步已自動連線 ✓ ☁️');
           connErr = null;
@@ -1572,8 +1547,7 @@ function renderPpl() {
       if (connErr) {
         syncCfg = prevCfg;
         const msg = connErr.message || '';
-        toast(msg.startsWith('auth') ? `連結中的金鑰已失效(HTTP ${msg.slice(5)},已重試仍失敗)`
-          : `連不上同步伺服器(${msg.startsWith('net:') ? 'HTTP ' + msg.slice(4) : '網路被擋'}),請確認用 Safari 開啟且有網路`);
+        toast(`連結中的金鑰連不上(${msg || '網路被擋'},已重試仍失敗),請確認網址正確且有網路`);
       }
     }
   }

@@ -1532,9 +1532,11 @@ function renderPpl() {
   } catch {}
   try { syncCfg = await idbGet('sync') || null; } catch {}
   // 一鍵連線:網址帶 #key=金鑰 時自動連線(保留 hash,讓「加入主畫面」也帶著金鑰)
-  if (!syncCfg) {
+  {
     const m = location.hash.match(/key=([A-Za-z0-9_]+)/);
-    if (m) {
+    // 連結裡的金鑰跟目前存的不一樣時也要重連,這樣萬一本機存到壞掉的金鑰,重新點一次連結就能自我修復
+    if (m && (!syncCfg || syncCfg.token !== m[1])) {
+      const prevCfg = syncCfg; // 記住原本的連線,失敗時要復原,避免誤點舊連結反而斷線
       syncCfg = { token: m[1] };
       let connErr = null;
       // 失敗先自動重試一次(間隔 1.5 秒),避免瞬間網路不穩就誤判金鑰失效
@@ -1551,7 +1553,7 @@ function renderPpl() {
         }
       }
       if (connErr) {
-        syncCfg = null;
+        syncCfg = prevCfg;
         const msg = connErr.message || '';
         toast(msg.startsWith('auth') ? `連結中的金鑰已失效(HTTP ${msg.slice(5)},已重試仍失敗)`
           : `連不上同步伺服器(${msg.startsWith('net:') ? 'HTTP ' + msg.slice(4) : '網路被擋'}),請確認用 Safari 開啟且有網路`);

@@ -1482,14 +1482,25 @@ function renderPpl() {
     const m = location.hash.match(/key=([A-Za-z0-9_]+)/);
     if (m) {
       syncCfg = { token: m[1] };
-      try {
-        await ghGetRemote();
-        await idbSet('sync', syncCfg);
-        toast('同步已自動連線 ✓ ☁️');
-      } catch (e) {
+      let connErr = null;
+      // 失敗先自動重試一次(間隔 1.5 秒),避免瞬間網路不穩就誤判金鑰失效
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await ghGetRemote();
+          await idbSet('sync', syncCfg);
+          toast('同步已自動連線 ✓ ☁️');
+          connErr = null;
+          break;
+        } catch (e) {
+          connErr = e;
+          if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+      if (connErr) {
         syncCfg = null;
-        toast(e.message && e.message.startsWith('auth') ? '連結中的金鑰已失效'
-          : `連不上同步伺服器(${(e.message || '').startsWith('net:') ? 'HTTP ' + e.message.slice(4) : '網路被擋'}),請確認用 Safari 開啟且有網路`);
+        const msg = connErr.message || '';
+        toast(msg.startsWith('auth') ? `連結中的金鑰已失效(HTTP ${msg.slice(5)},已重試仍失敗)`
+          : `連不上同步伺服器(${msg.startsWith('net:') ? 'HTTP ' + msg.slice(4) : '網路被擋'}),請確認用 Safari 開啟且有網路`);
       }
     }
   }

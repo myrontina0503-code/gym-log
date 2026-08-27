@@ -500,7 +500,21 @@ async function runDiagnostics(token) {
       const opts = { cache: 'no-store' };
       if (withAuth) opts.headers = { Authorization: `Bearer ${token}` };
       const r = await fetch(url, opts);
-      lines.push(`${r.ok ? '✅' : '❌'} ${label}\n    → HTTP ${r.status}`);
+      let extra = '';
+      if (!r.ok) {
+        try {
+          const j = await r.json();
+          if (j && j.message) extra = `\n    說明:${j.message}`;
+        } catch {}
+        const remain = r.headers.get('x-ratelimit-remaining');
+        const limit = r.headers.get('x-ratelimit-limit');
+        const reset = r.headers.get('x-ratelimit-reset');
+        if (remain !== null) {
+          const resetTime = reset ? new Date(parseInt(reset, 10) * 1000).toLocaleTimeString('zh-TW') : '?';
+          extra += `\n    額度:剩 ${remain}/${limit},重置時間 ${resetTime}`;
+        }
+      }
+      lines.push(`${r.ok ? '✅' : '❌'} ${label}\n    → HTTP ${r.status}${extra}`);
     } catch (e) {
       lines.push(`❌ ${label}\n    → 網路層級失敗:${(e && e.message) || e}`);
     }
@@ -508,7 +522,7 @@ async function runDiagnostics(token) {
   lines.push(`測試時間:${new Date().toLocaleString('zh-TW')}`);
   lines.push(`UA:${navigator.userAgent}`);
   lines.push('');
-  await test('① 連得到 GitHub API 嗎(不需金鑰)', 'https://api.github.com/', false);
+  await test('① 連得到 GitHub API 嗎(不需金鑰,額度較嚴格,失敗不代表同步會失敗)', 'https://api.github.com/', false);
   await test('② 這把金鑰本身有效嗎', 'https://api.github.com/user', true);
   await test('③ 這把金鑰看得到 gym-data 這個 repo 嗎', 'https://api.github.com/repos/myrontina0503-code/gym-data', true);
   await test('④ 能列出 repo 內容嗎(App 實際使用的呼叫)', 'https://api.github.com/repos/myrontina0503-code/gym-data/contents/', true);

@@ -492,6 +492,53 @@ function showBackupModal(mode) {
   });
 }
 
+/* ── 同步進階診斷:逐層測試,找出到底卡在哪一關 ── */
+async function runDiagnostics(token) {
+  const lines = [];
+  const test = async (label, url, withAuth) => {
+    try {
+      const opts = { cache: 'no-store' };
+      if (withAuth) opts.headers = { Authorization: `Bearer ${token}` };
+      const r = await fetch(url, opts);
+      lines.push(`${r.ok ? '✅' : '❌'} ${label}\n    → HTTP ${r.status}`);
+    } catch (e) {
+      lines.push(`❌ ${label}\n    → 網路層級失敗:${(e && e.message) || e}`);
+    }
+  };
+  lines.push(`測試時間:${new Date().toLocaleString('zh-TW')}`);
+  lines.push(`UA:${navigator.userAgent}`);
+  lines.push('');
+  await test('① 連得到 GitHub API 嗎(不需金鑰)', 'https://api.github.com/', false);
+  await test('② 這把金鑰本身有效嗎', 'https://api.github.com/user', true);
+  await test('③ 這把金鑰看得到 gym-data 這個 repo 嗎', 'https://api.github.com/repos/myrontina0503-code/gym-data', true);
+  await test('④ 能列出 repo 內容嗎(App 實際使用的呼叫)', 'https://api.github.com/repos/myrontina0503-code/gym-data/contents/', true);
+  return lines.join('\n\n');
+}
+async function showDiagModal(token) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="overlay" id="dg-ovl"><div class="modal">
+    <h2>🔧 進階診斷</h2>
+    <div id="dg-body" style="font-size:12.5px; line-height:1.7; white-space:pre-wrap; word-break:break-all; background:var(--sunken); border-radius:10px; padding:10px; margin-bottom:10px; max-height:50vh; overflow-y:auto;">診斷中…</div>
+    <div class="row">
+      <button class="go" id="dg-copy">複製結果</button>
+      <button class="go alt" id="dg-close" style="flex:0 0 90px">關閉</button>
+    </div>
+  </div></div>`;
+  const close = () => { root.innerHTML = ''; };
+  document.getElementById('dg-close').addEventListener('click', close);
+  document.getElementById('dg-ovl').addEventListener('click', e => { if (e.target.id === 'dg-ovl') close(); });
+  const body = document.getElementById('dg-body');
+  if (!token) { body.textContent = '沒有金鑰可以測試 — 請先在上面貼上同步金鑰,或先完成連線。'; return; }
+  const text = await runDiagnostics(token);
+  body.textContent = text;
+  document.getElementById('dg-copy').addEventListener('click', async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; }
+    catch { try { ok = document.execCommand('copy'); } catch { ok = false; } }
+    toast(ok ? '已複製 ✓' : '請長按上面文字手動複製');
+  });
+}
+
 /* ── 家人同步(以 GitHub 私人儲存庫當雲端資料庫)── */
 const SYNC_REPO = 'myrontina0503-code/gym-data';
 let syncCfg = null;   // {token} 每支手機各自輸入一次
@@ -1369,6 +1416,9 @@ function renderPpl() {
       <button class="go" id="sync-go">連線</button>
     </div>
     <div class="hint" style="margin-top:9px">貼上同步金鑰按「連線」,這支手機就會和全家共用同一份資料(自動上傳/下載)。金鑰向 Tina 索取。</div>`) + `
+    <div class="addrow" style="margin-top:8px">
+      <button class="go alt" id="sync-diag" style="flex:1">🔧 進階診斷(同步失敗時用)</button>
+    </div>
   </div>
   <div class="card"><h2>備份(存雲端保平安)</h2>
     <div class="addrow">
@@ -1389,6 +1439,10 @@ function renderPpl() {
   view.querySelector('#imp').addEventListener('click', () => importInput.click());
   view.querySelector('#cpy').addEventListener('click', () => showBackupModal('copy'));
   view.querySelector('#pst').addEventListener('click', () => showBackupModal('paste'));
+  view.querySelector('#sync-diag').addEventListener('click', () => {
+    const key = view.querySelector('#sync-key');
+    showDiagModal(syncCfg ? syncCfg.token : (key ? key.value.trim() : ''));
+  });
 
   if (syncCfg) {
     view.querySelector('#sync-share').addEventListener('click', async () => {

@@ -1,5 +1,5 @@
-/* 重訓記錄 PWA service worker:頁面走網路優先(拿得到更新),失敗用快取(離線可用) */
-const CACHE = 'gym-log-v1';
+/* 重訓記錄 PWA service worker:一律先繞過 HTTP 快取問網路拿最新版,離線才用本地快取 */
+const CACHE = 'gym-log-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -18,7 +18,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' })
       .then(res => {
         const clone = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
